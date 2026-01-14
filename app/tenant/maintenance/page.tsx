@@ -1,4 +1,3 @@
-// app/tenant/maintenance/page.tsx
 "use client";
 
 import { useEffect, useState } from "react";
@@ -18,6 +17,7 @@ import {
   CalendarDays,
   Home,
   Loader2,
+  X,
 } from "lucide-react";
 
 /* ================= TYPES ================= */
@@ -167,7 +167,7 @@ export default function TenantMaintenancePage() {
               Maintenance Requests
             </h1>
             <p className="mt-2 text-gray-600">
-              Submit and track your property issues
+              Submit and track issues in your unit
             </p>
           </div>
 
@@ -180,7 +180,7 @@ export default function TenantMaintenancePage() {
           </button>
         </header>
 
-        {/* REQUESTS LIST */}
+        {/* REQUEST LIST */}
         <div className="rounded-2xl border bg-white shadow-sm overflow-hidden">
           {loading ? (
             <div className="p-16 flex justify-center">
@@ -237,9 +237,9 @@ export default function TenantMaintenancePage() {
 
       {/* MODAL */}
       {showForm && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-2xl w-full p-8 space-y-6 shadow-2xl">
-            <div className="flex justify-between items-center">
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl w-full max-w-2xl p-8 shadow-2xl space-y-6">
+            <div className="flex items-center justify-between">
               <h2 className="text-2xl font-bold">
                 New Maintenance Request
               </h2>
@@ -247,14 +247,11 @@ export default function TenantMaintenancePage() {
                 onClick={() => setShowForm(false)}
                 className="text-gray-400 hover:text-gray-600"
               >
-                ✕
+                <X />
               </button>
             </div>
 
-            <form
-              onSubmit={handleSubmit}
-              className="space-y-6"
-            >
+            <form onSubmit={handleSubmit} className="space-y-6">
               <div className="grid md:grid-cols-2 gap-6">
                 <Input
                   label="Property"
@@ -264,7 +261,7 @@ export default function TenantMaintenancePage() {
                   }
                 />
                 <Input
-                  label="Unit Number"
+                  label="Unit"
                   value={formData.unit}
                   onChange={(v) =>
                     setFormData({ ...formData, unit: v })

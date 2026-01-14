@@ -105,11 +105,11 @@ const requestsCount = useCounter(requestsTarget, 50);
       <section id="features" className="bg-gray-50 py-20">
         <div className="mx-auto max-w-7xl px-6">
           <h2 className="text-3xl font-bold text-center">
-            Everything You Need to Manage Real Esta
+            Everything You Need to Manage Real Estate
           </h2>
 
           <p className="mt-4 text-center text-gray-600 max-w-2xl mx-auto">
-            Built for Kenyan landlords, agents, and future county housing
+            Built for Kenyan landlords, agents, and county housing
             oversight.
           </p>
 
@@ -143,7 +143,7 @@ const requestsCount = useCounter(requestsTarget, 50);
           </h2>
 
           <p className="mt-4 text-gray-600">
-            Join early users shaping the future of housing management in Kenya.
+            Join early users shaping the future of Real Estate management in Kenya.
           </p>
 
           <Link
