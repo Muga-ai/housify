@@ -2,10 +2,12 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { signInWithEmailAndPassword } from "firebase/auth";
+import { signInWithEmailAndPassword, AuthError } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
 import { Building2, Loader2, ArrowRight } from "lucide-react";
+
+type UserRole = "admin" | "tenant";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -15,26 +17,27 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  async function handleLogin(e: React.FormEvent) {
+  async function handleLogin(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError(null);
     setLoading(true);
 
     try {
-      // 1️⃣ Firebase Auth
+      // 1️⃣ Sign in with Firebase Auth
       const cred = await signInWithEmailAndPassword(auth, email, password);
       const uid = cred.user.uid;
 
       // 2️⃣ Fetch role from Firestore
       const snap = await getDoc(doc(db, "users", uid));
-
       if (!snap.exists()) {
         throw new Error("Account not configured. Contact support.");
       }
 
-      const role = snap.data().role;
+      const data = snap.data();
+      const role = data?.role as UserRole | undefined;
+      if (!role) throw new Error("Invalid account role.");
 
-      // 3️⃣ Role-based redirect
+      // 3️⃣ Redirect based on role
       switch (role) {
         case "admin":
           router.replace("/admin/dashboard");
@@ -42,19 +45,23 @@ export default function LoginPage() {
         case "tenant":
           router.replace("/tenant/dashboard");
           break;
-        default:
-          throw new Error("Invalid account role.");
       }
-    } catch (err: any) {
+    } catch (err) {
       console.error(err);
 
-      // Friendly messages only
-      if (err.code === "auth/invalid-credential") {
-        setError("Invalid email or password.");
-      } else if (err.code === "auth/user-not-found") {
-        setError("Account not found.");
+      // Type-safe error handling
+      if (err instanceof Error) {
+        // Firebase Auth errors may have 'code'
+        const authError = err as AuthError;
+        if (authError.code === "auth/invalid-credential") {
+          setError("Invalid email or password.");
+        } else if (authError.code === "auth/user-not-found") {
+          setError("Account not found.");
+        } else {
+          setError(err.message);
+        }
       } else {
-        setError(err.message || "Login failed.");
+        setError("Login failed. Please try again.");
       }
     } finally {
       setLoading(false);

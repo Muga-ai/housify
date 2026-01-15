@@ -100,12 +100,13 @@ export default function AdminDashboard() {
           limit(5)
         );
         const recentPropSnap = await getDocs(recentPropQuery);
-        setRecentProperties(
-          recentPropSnap.docs.map((d) => ({
-            id: d.id,
-            ...(d.data() as any),
-          }))
-        );
+       setRecentProperties(
+  recentPropSnap.docs.map((d) => ({
+    id: d.id,
+    name: d.data().name as string,
+    location: d.data().location as string | undefined,
+  }))
+);
 
         /* ---- RECENT TENANTS ---- */
         const recentTenantQuery = query(
@@ -115,11 +116,13 @@ export default function AdminDashboard() {
         );
         const recentTenantSnap = await getDocs(recentTenantQuery);
         setRecentTenants(
-          recentTenantSnap.docs.map((d) => ({
-            id: d.id,
-            ...(d.data() as any),
-          }))
-        );
+  recentTenantSnap.docs.map((d) => ({
+    id: d.id,
+    name: d.data().name as string,
+    email: d.data().email as string,
+  }))
+);
+
       } catch (err) {
         console.error("Dashboard load error:", err);
       } finally {

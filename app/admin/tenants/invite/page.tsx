@@ -54,9 +54,9 @@ export default function AdminTenantInvitePage() {
 
       // 4️⃣ Generate invite link
       setInviteLink(`${window.location.origin}/signup/${code}`);
-    } catch (err) {
-      console.error(err);
-      setError("Failed to create invite. Try again.");
+    } catch (err: any) {
+  console.error("Invite creation failed:", err);
+  setError(`Failed to create invite: ${err.message || "Unknown error"}`);
     } finally {
       setLoading(false);
     }

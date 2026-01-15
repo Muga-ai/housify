@@ -1,15 +1,22 @@
-import { db } from "@/lib/firebase";
-import { addDoc, collection, doc, getDoc, setDoc } from "firebase/firestore";
+import { doc, getDoc, setDoc, updateDoc } from "firebase/firestore";
+import { db } from "./firebase";
 import { nanoid } from "nanoid";
 
-/* ---------------- CREATE INVITE ---------------- */
+/* ====== TYPES ====== */
+export interface InviteData {
+  code: string;
+  tenantId: string;
+  email: string;
+  used: boolean;
+}
 
-export async function createTenantInvite(tenantId: string, email: string) {
-  // Generate a short unique code
+/* ====== FUNCTIONS ====== */
+
+// Create a tenant invite
+export async function createTenantInvite(tenantId: string, email: string): Promise<string> {
   const code = nanoid(10); // e.g., "aB12cD34Ef"
 
-  // Save invite in Firestore
-  await setDoc(doc(db, "tenantInvites", code), {
+  await setDoc(doc(db, "tenant_invites", code), {
     tenantId,
     email,
     createdAt: new Date(),
@@ -20,32 +27,26 @@ export async function createTenantInvite(tenantId: string, email: string) {
   return code;
 }
 
-/* ---------------- VERIFY INVITE ---------------- */
-
-export async function verifyInvite(code: string) {
-  const inviteRef = doc(db, "tenantInvites", code);
-  const snap = await getDoc(inviteRef);
+// Verify invite code exists and is unused
+export async function verifyInvite(code: string): Promise<InviteData | null> {
+  const ref = doc(db, "invites", code);
+  const snap = await getDoc(ref);
 
   if (!snap.exists()) return null;
 
-  const inviteData = snap.data();
+  const data = snap.data();
+  if (data.used) return null;
 
-  // Check expiration
-  if (inviteData.expiresAt.toDate() < new Date()) return null;
-
-  // Check if already used
-  if (inviteData.used) return null;
-
-  return { code, ...inviteData };
+  return {
+    code,
+    tenantId: data.tenantId,
+    email: data.email,
+    used: data.used,
+  };
 }
 
-/* ---------------- MARK INVITE USED ---------------- */
-
+// Mark invite as used
 export async function markInviteUsed(code: string) {
-  const inviteRef = doc(db, "tenantInvites", code);
-  await setDoc(
-    inviteRef,
-    { used: true, usedAt: new Date() },
-    { merge: true }
-  );
+  const ref = doc(db, "tenant_invites", code);
+  await updateDoc(ref, { used: true });
 }
