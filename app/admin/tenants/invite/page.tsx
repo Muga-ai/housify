@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { addDoc, collection, query, where, getDocs } from "firebase/firestore";
+import { addDoc, collection, query, where, getDocs, serverTimestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { createTenantInvite } from "@/lib/invite";
 import { ClipboardCopy, Loader2 } from "lucide-react";
@@ -15,12 +15,12 @@ export default function AdminTenantInvitePage() {
 
   const handleCreateInvite = async () => {
     setError("");
+
     if (!email || !name) {
       setError("Name and Email are required");
       return;
     }
 
-    // Basic email format check
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email)) {
       setError("Invalid email address");
@@ -30,33 +30,29 @@ export default function AdminTenantInvitePage() {
     setLoading(true);
 
     try {
-      // 1️⃣ Check if tenant with email already exists
       const q = query(collection(db, "tenants"), where("email", "==", email));
       const snap = await getDocs(q);
+
       if (!snap.empty) {
         setError("A tenant with this email already exists");
         setLoading(false);
         return;
       }
 
-      // 2️⃣ Create tenant record (pending)
       const tenantRef = await addDoc(collection(db, "tenants"), {
         name: name.trim(),
         email: email.trim(),
         propertyId: null,
         unitId: null,
         status: "pending",
-        createdAt: new Date(),
+        createdAt: serverTimestamp(),
       });
 
-      // 3️⃣ Create invite code
       const code = await createTenantInvite(tenantRef.id, email);
 
-      // 4️⃣ Generate invite link
       setInviteLink(`${window.location.origin}/signup/${code}`);
-    } catch (err: any) {
-  console.error("Invite creation failed:", err);
-  setError(`Failed to create invite: ${err.message || "Unknown error"}`);
+    } catch {
+      setError("Failed to create invite.");
     } finally {
       setLoading(false);
     }
@@ -94,9 +90,7 @@ export default function AdminTenantInvitePage() {
       <button
         onClick={handleCreateInvite}
         disabled={loading}
-        className={`flex items-center justify-center gap-2 w-full bg-indigo-600 text-white px-6 py-3 rounded hover:bg-indigo-700 ${
-          loading ? "opacity-70 cursor-not-allowed" : ""
-        }`}
+        className="flex items-center justify-center gap-2 w-full bg-indigo-600 text-white px-6 py-3 rounded hover:bg-indigo-700 disabled:opacity-70"
       >
         {loading && <Loader2 className="h-4 w-4 animate-spin" />}
         Create Invite

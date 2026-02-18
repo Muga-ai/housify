@@ -2,26 +2,16 @@
 
 import { useState, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
-import { verifyInvite, markInviteUsed } from "@/lib/invite";
+import { verifyInvite, markInviteUsed, InviteData } from "@/lib/invite";
 import { doc, updateDoc } from "firebase/firestore";
-import { db } from "@/lib/firebase";
+import { db, auth } from "@/lib/firebase";
+import { createUserWithEmailAndPassword } from "firebase/auth";
 import { Loader2 } from "lucide-react";
-
-/* ================= TYPES ================= */
-
-interface InviteData {
-  tenantId: string;
-  email: string;
-  used: boolean;
-  expiresAt?: Date;
-}
-
-/* ================= PAGE ================= */
 
 export default function TenantSignupPage() {
   const router = useRouter();
-  const params = useParams<{ code: string }>();
-  const code = params.code;
+  const params = useParams();
+  const code = params?.code as string;
 
   const [loading, setLoading] = useState(true);
   const [invite, setInvite] = useState<InviteData | null>(null);
@@ -33,21 +23,23 @@ export default function TenantSignupPage() {
   useEffect(() => {
     const checkInvite = async () => {
       if (!code) {
-        setError("Invalid invite link");
+        setError("Invalid invite link.");
         setLoading(false);
         return;
       }
 
-      const data = await verifyInvite(code);
-
-      if (!data) {
-        setError("Invalid or expired invite link.");
-      } else {
-       setInvite(data);
-
+      try {
+        const data = await verifyInvite(code);
+        if (!data) {
+          setError("Invalid or expired invite link.");
+        } else {
+          setInvite(data);
+        }
+      } catch {
+        setError("Failed to verify invite.");
+      } finally {
+        setLoading(false);
       }
-
-      setLoading(false);
     };
 
     checkInvite();
@@ -56,32 +48,42 @@ export default function TenantSignupPage() {
   const handleSignup = async () => {
     setError("");
 
-    if (!invite) {
-      setError("Invite not found.");
+    if (!name || !password) {
+      setError("Name and password are required.");
       return;
     }
 
-    if (!name || !password) {
-      setError("Name and password are required");
+    if (!invite) {
+      setError("Invite not found.");
       return;
     }
 
     setLoading(true);
 
     try {
-      await markInviteUsed(code);
+      const userCredential = await createUserWithEmailAndPassword(
+        auth,
+        invite.email,
+        password
+      );
+
+      const uid = userCredential.user.uid;
 
       const tenantRef = doc(db, "tenants", invite.tenantId);
+
       await updateDoc(tenantRef, {
         name,
         status: "active",
+        uid,
+        updatedAt: new Date(),
       });
 
-      setSuccess("Account created successfully! Redirecting to login...");
+      await markInviteUsed(code);
+
+      setSuccess("Account created successfully! Redirecting...");
       setTimeout(() => router.push("/login"), 2000);
-    } catch (err) {
-      console.error(err);
-      setError("Failed to complete signup.");
+    } catch (err: any) {
+      setError(err.message || "Signup failed.");
     } finally {
       setLoading(false);
     }

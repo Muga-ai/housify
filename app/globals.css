@@ -2,9 +2,4 @@
 @tailwind components;
 @tailwind utilities;
 
-@layer base {
-  html,
-  body {
-    @apply bg-white text-gray-900 antialiased;
-  }
-}
+/* Optional: custom utility overrides or component styles can go here */

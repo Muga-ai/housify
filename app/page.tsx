@@ -16,7 +16,7 @@ const tenantsTarget = 148;
 const rentTarget = 92; // percentage
 const requestsTarget = 5;
 
-// Animate the numbers using my custom hook
+// Animate the numbers using custom hook
 const propertiesCount = useCounter(propertiesTarget, 50);
 const tenantsCount = useCounter(tenantsTarget, 50);
 const rentCount = useCounter(rentTarget, 50);
