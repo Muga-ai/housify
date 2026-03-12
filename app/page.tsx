@@ -57,11 +57,11 @@ const requestsCount = useCounter(requestsTarget, 50);
 
           <div className="mt-8 flex gap-4">
             <Link
-              href="/login"
-              className="rounded-md bg-indigo-600 px-6 py-3 text-white font-medium hover:bg-indigo-700 transition"
-            >
-              Get Started
-            </Link>
+  href="/register"
+  className="rounded-md bg-indigo-600 px-6 py-3 text-white font-medium hover:bg-indigo-700 transition"
+>
+  Get Started
+</Link>
 
             <a
               href="#features"

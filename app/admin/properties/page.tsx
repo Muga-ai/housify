@@ -1,103 +1,74 @@
 "use client";
 
+/**
+ * app/admin/properties/page.tsx  (UPDATED)
+ *
+ * Changes from original:
+ * - Gets orgId from OrgContext
+ * - All queries filter by orgId
+ * - All new documents include orgId field
+ */
+
 import { useEffect, useState } from "react";
 import { Plus, Pencil, Trash2, Loader2 } from "lucide-react";
 import {
-  collection,
-  getDocs,
-  addDoc,
-  updateDoc,
-  deleteDoc,
-  doc,
-  query,
-  where,
+  collection, getDocs, addDoc, updateDoc, deleteDoc, doc, query, where, serverTimestamp,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+import { useOrgContext } from "../layout";
 
-interface Property {
-  id: string;
-  name: string;
-  location: string;
-}
-
-interface Unit {
-  id: string;
-  propertyId: string;
-}
+interface Property { id: string; name: string; location: string; }
+interface Unit { id: string; propertyId: string; }
 
 export default function AdminPropertiesPage() {
+  const { orgId } = useOrgContext();
   const [properties, setProperties] = useState<Property[]>([]);
   const [units, setUnits] = useState<Unit[]>([]);
   const [loading, setLoading] = useState(true);
-
   const [showForm, setShowForm] = useState(false);
   const [editingProperty, setEditingProperty] = useState<Property | null>(null);
+  const [formData, setFormData] = useState({ name: "", location: "" });
 
-  const [formData, setFormData] = useState({
-    name: "",
-    location: "",
-  });
-
-  // 🔹 Fetch properties + units
   useEffect(() => {
+    if (!orgId) return;
     const fetchData = async () => {
       try {
-        const propertySnap = await getDocs(collection(db, "properties"));
-        const unitSnap = await getDocs(collection(db, "units"));
-
-        setProperties(
-          propertySnap.docs.map(
-            (d) => ({ id: d.id, ...d.data() } as Property)
-          )
-        );
-
-        setUnits(
-          unitSnap.docs.map(
-            (d) => ({ id: d.id, ...d.data() } as Unit)
-          )
-        );
+        const orgFilter = where("orgId", "==", orgId);
+        const [propertySnap, unitSnap] = await Promise.all([
+          getDocs(query(collection(db, "properties"), orgFilter)),
+          getDocs(query(collection(db, "units"), orgFilter)),
+        ]);
+        setProperties(propertySnap.docs.map((d) => ({ id: d.id, ...d.data() } as Property)));
+        setUnits(unitSnap.docs.map((d) => ({ id: d.id, ...d.data() } as Unit)));
       } catch (err) {
         console.error("Failed to load properties", err);
       } finally {
         setLoading(false);
       }
     };
-
     fetchData();
-  }, []);
+  }, [orgId]);
 
-  // 🔹 Create or Update property
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-
     try {
       if (editingProperty) {
-        const ref = doc(db, "properties", editingProperty.id);
-        await updateDoc(ref, {
+        await updateDoc(doc(db, "properties", editingProperty.id), {
           name: formData.name.trim(),
           location: formData.location.trim(),
         });
-
         setProperties((prev) =>
-          prev.map((p) =>
-            p.id === editingProperty.id
-              ? { ...p, ...formData }
-              : p
-          )
+          prev.map((p) => p.id === editingProperty.id ? { ...p, ...formData } : p)
         );
       } else {
         const ref = await addDoc(collection(db, "properties"), {
           name: formData.name.trim(),
           location: formData.location.trim(),
-          createdAt: new Date(),
+          orgId,                          // ← scoped to org
+          createdAt: serverTimestamp(),
         });
-
-        setProperties((prev) => [
-          ...prev,
-          { id: ref.id, ...formData },
-        ]);
+        setProperties((prev) => [...prev, { id: ref.id, ...formData }]);
       }
-
       setFormData({ name: "", location: "" });
       setEditingProperty(null);
       setShowForm(false);
@@ -107,19 +78,12 @@ export default function AdminPropertiesPage() {
     }
   };
 
-  // 🔹 Delete property (only if no units)
   const deleteProperty = async (propertyId: string) => {
-    const propertyUnits = units.filter(
-      (u) => u.propertyId === propertyId
-    );
-
-    if (propertyUnits.length > 0) {
+    if (units.filter((u) => u.propertyId === propertyId).length > 0) {
       alert("Cannot delete property with existing units.");
       return;
     }
-
     if (!confirm("Delete this property?")) return;
-
     try {
       await deleteDoc(doc(db, "properties", propertyId));
       setProperties((prev) => prev.filter((p) => p.id !== propertyId));
@@ -132,8 +96,6 @@ export default function AdminPropertiesPage() {
   return (
     <main className="min-h-screen bg-gray-50 p-6">
       <div className="mx-auto max-w-7xl space-y-6">
-
-        {/* HEADER */}
         <header className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <h1 className="text-3xl font-bold text-gray-900">Properties</h1>
           <button
@@ -144,7 +106,6 @@ export default function AdminPropertiesPage() {
           </button>
         </header>
 
-        {/* TABLE */}
         <div className="overflow-x-auto rounded-xl border bg-white shadow-sm">
           {loading ? (
             <div className="flex justify-center p-16">
@@ -170,26 +131,18 @@ export default function AdminPropertiesPage() {
                   </tr>
                 ) : (
                   properties.map((property, index) => {
-                    const unitCount = units.filter(
-                      (u) => u.propertyId === property.id
-                    ).length;
-
+                    const unitCount = units.filter((u) => u.propertyId === property.id).length;
                     return (
                       <tr key={property.id} className="border-t hover:bg-gray-50">
                         <td className="px-6 py-3">{index + 1}</td>
-                        <td className="px-6 py-3 font-medium">
-                          {property.name}
-                        </td>
+                        <td className="px-6 py-3 font-medium">{property.name}</td>
                         <td className="px-6 py-3">{property.location}</td>
                         <td className="px-6 py-3">{unitCount}</td>
                         <td className="px-6 py-3 flex gap-3">
                           <button
                             onClick={() => {
                               setEditingProperty(property);
-                              setFormData({
-                                name: property.name,
-                                location: property.location,
-                              });
+                              setFormData({ name: property.name, location: property.location });
                               setShowForm(true);
                             }}
                             className="text-indigo-600 hover:underline"
@@ -213,50 +166,32 @@ export default function AdminPropertiesPage() {
         </div>
       </div>
 
-      {/* MODAL */}
       {showForm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <div className="bg-white w-full max-w-xl rounded-2xl p-8 space-y-6">
             <h2 className="text-xl font-bold">
               {editingProperty ? "Edit Property" : "Add Property"}
             </h2>
-
             <form onSubmit={handleSubmit} className="space-y-4">
               <input
                 required
                 placeholder="Property Name"
                 value={formData.name}
-                onChange={(e) =>
-                  setFormData({ ...formData, name: e.target.value })
-                }
+                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                 className="w-full rounded-lg border px-4 py-3"
               />
-
               <input
                 required
                 placeholder="Location"
                 value={formData.location}
-                onChange={(e) =>
-                  setFormData({ ...formData, location: e.target.value })
-                }
+                onChange={(e) => setFormData({ ...formData, location: e.target.value })}
                 className="w-full rounded-lg border px-4 py-3"
               />
-
               <div className="flex justify-end gap-4 pt-4">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowForm(false);
-                    setEditingProperty(null);
-                  }}
-                  className="px-6 py-3 border rounded-lg"
-                >
+                <button type="button" onClick={() => { setShowForm(false); setEditingProperty(null); }} className="px-6 py-3 border rounded-lg">
                   Cancel
                 </button>
-                <button
-                  type="submit"
-                  className="px-6 py-3 bg-indigo-600 text-white rounded-lg"
-                >
+                <button type="submit" className="px-6 py-3 bg-indigo-600 text-white rounded-lg">
                   Save
                 </button>
               </div>

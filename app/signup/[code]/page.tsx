@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { verifyInvite, markInviteUsed, InviteData } from "@/lib/invite";
-import { doc, updateDoc } from "firebase/firestore";
+import { doc, updateDoc, setDoc, serverTimestamp } from "firebase/firestore"; // ← ADDED setDoc, serverTimestamp
 import { db, auth } from "@/lib/firebase";
 import { createUserWithEmailAndPassword } from "firebase/auth";
 import { Loader2 } from "lucide-react";
@@ -58,32 +58,53 @@ export default function TenantSignupPage() {
       return;
     }
 
+    if (password.length < 6) {
+      setError("Password must be at least 6 characters.");
+      return;
+    }
+
     setLoading(true);
 
     try {
+      // Step 1 — Create Firebase Auth account
       const userCredential = await createUserWithEmailAndPassword(
         auth,
         invite.email,
         password
       );
-
       const uid = userCredential.user.uid;
 
-      const tenantRef = doc(db, "tenants", invite.tenantId);
-
-      await updateDoc(tenantRef, {
-        name,
-        status: "active",
-        uid,
-        updatedAt: new Date(),
+      // Step 2 — Create users/{uid} document so rules can read role + orgId
+      // ← ADDED: this was completely missing, causing all post-login permission errors
+      await setDoc(doc(db, "users", uid), {
+        role: "tenant",
+        orgId: invite.orgId,   // ← comes from the invite record
+        email: invite.email,
+        createdAt: serverTimestamp(),
       });
 
+      // Step 3 — Stamp uid onto the tenants record and activate it
+      await updateDoc(doc(db, "tenants", invite.tenantId), {
+        name: name.trim(),
+        status: "active",
+        uid,
+        updatedAt: serverTimestamp(), // ← CHANGED: was new Date()
+      });
+
+      // Step 4 — Mark invite as used so the link can't be reused
       await markInviteUsed(code);
 
       setSuccess("Account created successfully! Redirecting...");
       setTimeout(() => router.push("/login"), 2000);
     } catch (err: any) {
-      setError(err.message || "Signup failed.");
+      // Surface Firebase auth errors clearly
+      if (err.code === "auth/email-already-in-use") {
+        setError("An account with this email already exists. Please log in instead.");
+      } else if (err.code === "auth/weak-password") {
+        setError("Password must be at least 6 characters.");
+      } else {
+        setError(err.message || "Signup failed.");
+      }
     } finally {
       setLoading(false);
     }
@@ -97,9 +118,9 @@ export default function TenantSignupPage() {
     );
   }
 
-  if (error) {
+  if (error && !invite) {
     return (
-      <div className="flex items-center justify-center min-h-screen text-red-600">
+      <div className="flex items-center justify-center min-h-screen text-red-600 text-center px-6">
         {error}
       </div>
     );
@@ -109,12 +130,22 @@ export default function TenantSignupPage() {
     <main className="p-8 max-w-md mx-auto space-y-6">
       <h1 className="text-2xl font-bold">Complete Your Signup</h1>
 
-      {success && <div className="text-green-600">{success}</div>}
+      {success && (
+        <div className="text-green-600 bg-green-50 border border-green-200 px-4 py-3 rounded">
+          {success}
+        </div>
+      )}
+
+      {error && (
+        <div className="text-red-600 bg-red-50 border border-red-200 px-4 py-3 rounded">
+          {error}
+        </div>
+      )}
 
       {!success && invite && (
         <>
           <p className="text-sm text-gray-700">
-            Invite Email: {invite.email}
+            Signing up as: <span className="font-medium">{invite.email}</span>
           </p>
 
           <input
@@ -125,7 +156,7 @@ export default function TenantSignupPage() {
           />
 
           <input
-            placeholder="Password"
+            placeholder="Password (min. 6 characters)"
             type="password"
             className="w-full border px-4 py-3 rounded"
             value={password}
@@ -135,10 +166,18 @@ export default function TenantSignupPage() {
           <button
             onClick={handleSignup}
             disabled={loading}
-            className="w-full bg-indigo-600 text-white px-6 py-3 rounded hover:bg-indigo-700"
+            className="w-full bg-indigo-600 text-white px-6 py-3 rounded hover:bg-indigo-700 disabled:opacity-70 flex items-center justify-center gap-2"
           >
-            {loading ? "Signing Up..." : "Complete Signup"}
+            {loading && <Loader2 className="h-4 w-4 animate-spin" />}
+            {loading ? "Creating account..." : "Complete Signup"}
           </button>
+
+          <p className="text-xs text-center text-gray-500">
+            Already have an account?{" "}
+            <a href="/login" className="text-indigo-600 hover:underline">
+              Log in
+            </a>
+          </p>
         </>
       )}
     </main>

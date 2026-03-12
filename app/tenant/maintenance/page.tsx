@@ -9,6 +9,8 @@ import {
   addDoc,
   serverTimestamp,
   Timestamp,
+  getDoc,         // ← ADDED
+  doc,            // ← ADDED
 } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
 import {
@@ -50,6 +52,7 @@ export default function TenantMaintenancePage() {
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [orgId, setOrgId] = useState<string | null>(null); // ← ADDED
 
   const [formData, setFormData] = useState<FormState>({
     property: "",
@@ -59,6 +62,15 @@ export default function TenantMaintenancePage() {
   });
 
   const user = auth.currentUser;
+
+  /* ================= FETCH ORG ID ================= */
+  // ← ADDED: resolve the tenant's orgId from their user record once on mount
+  useEffect(() => {
+    if (!user) return;
+    getDoc(doc(db, "users", user.uid)).then((snap) => {
+      if (snap.exists()) setOrgId(snap.data().orgId ?? null);
+    });
+  }, [user]);
 
   /* ================= FETCH REQUESTS ================= */
 
@@ -128,6 +140,7 @@ export default function TenantMaintenancePage() {
           user.email?.split("@")[0] ||
           "Tenant",
         tenantId: user.uid,
+        orgId: orgId ?? "",  // ← ADDED: scopes request to the tenant's org
         status: "open",
         submittedAt: serverTimestamp(),
       });
@@ -193,7 +206,7 @@ export default function TenantMaintenancePage() {
                 No maintenance requests yet
               </p>
               <p className="text-gray-400 mt-2">
-                Click “New Request” to report an issue
+                Click New Request to report an issue
               </p>
             </div>
           ) : (

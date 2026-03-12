@@ -18,8 +18,12 @@ import {
   addDoc,
   updateDoc,
   doc,
+  query,          // ← ADDED
+  where,          // ← ADDED
+  serverTimestamp, // ← ADDED
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+import { useOrgContext } from "../layout"; // ← ADDED
 
 /* ================= TYPES ================= */
 
@@ -50,6 +54,8 @@ interface Tenant {
 /* ================= PAGE ================= */
 
 export default function AdminTenantsPage() {
+  const { orgId } = useOrgContext(); // ← ADDED
+
   const [tenants, setTenants] = useState<Tenant[]>([]);
   const [properties, setProperties] = useState<Property[]>([]);
   const [units, setUnits] = useState<Unit[]>([]);
@@ -66,18 +72,23 @@ export default function AdminTenantsPage() {
   /* ================= FETCH DATA ================= */
 
   useEffect(() => {
+    if (!orgId) return; // ← ADDED: wait until orgId is resolved
+
     const fetchData = async () => {
       try {
+        const orgFilter = where("orgId", "==", orgId); // ← ADDED
+
+        // ← CHANGED: all three queries now scoped to orgId
         const [tenantSnap, propertySnap, unitSnap] = await Promise.all([
-          getDocs(collection(db, "tenants")),
-          getDocs(collection(db, "properties")),
-          getDocs(collection(db, "units")),
+          getDocs(query(collection(db, "tenants"), orgFilter)),
+          getDocs(query(collection(db, "properties"), orgFilter)),
+          getDocs(query(collection(db, "units"), orgFilter)),
         ]);
 
         setTenants(
           tenantSnap.docs.map((d) => ({
             id: d.id,
-            status: d.data().status ?? "active", // backward safe
+            status: d.data().status ?? "active",
             ...d.data(),
           })) as Tenant[]
         );
@@ -101,7 +112,7 @@ export default function AdminTenantsPage() {
     };
 
     fetchData();
-  }, []);
+  }, [orgId]); // ← CHANGED: depends on orgId not []
 
   /* ================= ADD TENANT ================= */
 
@@ -115,7 +126,8 @@ export default function AdminTenantsPage() {
         propertyId: formData.propertyId || null,
         unitId: formData.unitId || null,
         status: "pending",
-        createdAt: new Date(),
+        orgId,                    // ← ADDED: scope to org
+        createdAt: serverTimestamp(), // ← CHANGED: was new Date()
       });
 
       if (formData.unitId) {
@@ -244,31 +256,29 @@ export default function AdminTenantsPage() {
   return (
     <main className="min-h-screen bg-gray-50 p-6">
       <div className="mx-auto max-w-7xl space-y-6">
-        {/* HEADER */}
-       <header className="flex justify-between items-center">
-  <h1 className="text-3xl font-bold text-gray-900">Tenants</h1>
 
-  <div className="flex items-center gap-3">
-    {/* Invite Tenant */}
-    <Link
-      href="/admin/tenants/invite"
-      className="flex items-center gap-2 border border-indigo-600 text-indigo-600 px-4 py-2 rounded-md hover:bg-indigo-50"
-    >
-      Invite Tenant
-    </Link>
+        {/* HEADER — unchanged */}
+        <header className="flex justify-between items-center">
+          <h1 className="text-3xl font-bold text-gray-900">Tenants</h1>
 
-    {/* Manual Add Tenant */}
-    <button
-      onClick={() => setShowForm(true)}
-      className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-md hover:bg-indigo-700"
-    >
-      <Plus className="h-4 w-4" /> Add Tenant
-    </button>
-  </div>
-</header>
+          <div className="flex items-center gap-3">
+            <Link
+              href="/admin/tenants/invite"
+              className="flex items-center gap-2 border border-indigo-600 text-indigo-600 px-4 py-2 rounded-md hover:bg-indigo-50"
+            >
+              Invite Tenant
+            </Link>
 
+            <button
+              onClick={() => setShowForm(true)}
+              className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-md hover:bg-indigo-700"
+            >
+              <Plus className="h-4 w-4" /> Add Tenant
+            </button>
+          </div>
+        </header>
 
-        {/* TABLE */}
+        {/* TABLE — unchanged */}
         <div className="rounded-xl border bg-white shadow-sm overflow-x-auto">
           {loading ? (
             <div className="p-16 flex justify-center">
@@ -287,65 +297,73 @@ export default function AdminTenantsPage() {
                 </tr>
               </thead>
               <tbody>
-                {tenants.map((tenant, i) => {
-                  const property = properties.find(
-                    (p) => p.id === tenant.propertyId
-                  );
-                  const unit = units.find(
-                    (u) => u.id === tenant.unitId
-                  );
-                  const status = statusUI[tenant.status];
+                {tenants.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="py-12 text-center text-gray-500">
+                      No tenants yet.
+                    </td>
+                  </tr>
+                ) : (
+                  tenants.map((tenant, i) => {
+                    const property = properties.find(
+                      (p) => p.id === tenant.propertyId
+                    );
+                    const unit = units.find(
+                      (u) => u.id === tenant.unitId
+                    );
+                    const status = statusUI[tenant.status];
 
-                  return (
-                    <tr key={tenant.id} className="border-t hover:bg-gray-50">
-                      <td className="px-6 py-3">{i + 1}</td>
-                      <td className="px-6 py-3 flex items-center gap-2">
-                        <User className="h-4 w-4 text-gray-500" />
-                        {tenant.name}
-                      </td>
-                      <td className="px-6 py-3">{tenant.email}</td>
-                      <td className="px-6 py-3 flex items-center gap-2">
-                        <Home className="h-4 w-4 text-gray-500" />
-                        {property?.name || "-"} / {unit?.unitNumber || "-"}
-                      </td>
-                      <td className="px-6 py-3">
-                        <span
-                          className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-medium ${status.className}`}
-                        >
-                          {status.icon}
-                          {status.label}
-                        </span>
-                      </td>
-                      <td className="px-6 py-3 flex gap-4">
-                        <button
-                          onClick={() => toggleTenantStatus(tenant)}
-                          className="text-indigo-600 hover:underline"
-                        >
-                          {tenant.status === "active"
-                            ? "Disable"
-                            : "Activate"}
-                        </button>
-
-                        {tenant.unitId && (
-                          <button
-                            onClick={() => removeFromUnit(tenant)}
-                            className="text-red-600 hover:underline flex items-center gap-1"
+                    return (
+                      <tr key={tenant.id} className="border-t hover:bg-gray-50">
+                        <td className="px-6 py-3">{i + 1}</td>
+                        <td className="px-6 py-3 flex items-center gap-2">
+                          <User className="h-4 w-4 text-gray-500" />
+                          {tenant.name}
+                        </td>
+                        <td className="px-6 py-3">{tenant.email}</td>
+                        <td className="px-6 py-3 flex items-center gap-2">
+                          <Home className="h-4 w-4 text-gray-500" />
+                          {property?.name || "-"} / {unit?.unitNumber || "-"}
+                        </td>
+                        <td className="px-6 py-3">
+                          <span
+                            className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-medium ${status.className}`}
                           >
-                            <Link2Off className="h-4 w-4" />
-                            Remove
+                            {status.icon}
+                            {status.label}
+                          </span>
+                        </td>
+                        <td className="px-6 py-3 flex gap-4">
+                          <button
+                            onClick={() => toggleTenantStatus(tenant)}
+                            className="text-indigo-600 hover:underline"
+                          >
+                            {tenant.status === "active"
+                              ? "Disable"
+                              : "Activate"}
                           </button>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
+
+                          {tenant.unitId && (
+                            <button
+                              onClick={() => removeFromUnit(tenant)}
+                              className="text-red-600 hover:underline flex items-center gap-1"
+                            >
+                              <Link2Off className="h-4 w-4" />
+                              Remove
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
               </tbody>
             </table>
           )}
         </div>
       </div>
 
-      {/* ADD TENANT MODAL */}
+      {/* ADD TENANT MODAL — unchanged UI, orgId added to submit */}
       {showForm && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-2xl max-w-xl w-full p-8 space-y-6">

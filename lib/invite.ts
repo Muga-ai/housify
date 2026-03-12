@@ -1,55 +1,98 @@
-import { doc, getDoc, setDoc, updateDoc, serverTimestamp } from "firebase/firestore";
+/**
+ * lib/invite.ts  (UPDATED)
+ *
+ * Invite tokens now carry orgId so tenants are scoped
+ * to the correct company when they sign up.
+ */
+
+import {
+  collection,
+  addDoc,
+  query,
+  where,
+  getDocs,
+  updateDoc,
+  doc,
+  serverTimestamp,
+  Timestamp,
+} from "firebase/firestore";
 import { db } from "./firebase";
-import { nanoid } from "nanoid";
+import { nanoid } from "nanoid"; // npm install nanoid
 
 export interface InviteData {
   code: string;
   tenantId: string;
   email: string;
+  orgId: string;          // ← NEW
   used: boolean;
+  expiresAt: Date;
 }
 
+/**
+ * Creates an invite document and returns the invite code.
+ * Called by admin when inviting a tenant.
+ */
 export async function createTenantInvite(
   tenantId: string,
-  email: string
+  email: string,
+  orgId: string           // ← NEW param
 ): Promise<string> {
-  const code = nanoid(10);
+  const code = nanoid(32);
 
-  await setDoc(doc(db, "invites", code), {
+  const expiresAt = new Date();
+  expiresAt.setDate(expiresAt.getDate() + 7); // 7-day expiry
+
+  await addDoc(collection(db, "invites"), {
+    code,
     tenantId,
     email,
-    createdAt: serverTimestamp(),
-    expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+    orgId,                 // ← stored on invite
     used: false,
+    createdAt: serverTimestamp(),
+    expiresAt,
   });
 
   return code;
 }
 
-export async function verifyInvite(
-  code: string
-): Promise<InviteData | null> {
-  const ref = doc(db, "invites", code);
-  const snap = await getDoc(ref);
+/**
+ * Verifies an invite code is valid, unused, and not expired.
+ */
+export async function verifyInvite(code: string): Promise<InviteData | null> {
+  const q = query(collection(db, "invites"), where("code", "==", code));
+  const snap = await getDocs(q);
 
-  if (!snap.exists()) return null;
+  if (snap.empty) return null;
 
-  const data = snap.data();
+  const data = snap.docs[0].data();
 
   if (data.used) return null;
 
-  if (data.expiresAt && data.expiresAt.toDate() < new Date())
-    return null;
+  const expiresAt =
+    data.expiresAt instanceof Timestamp
+      ? data.expiresAt.toDate()
+      : new Date(data.expiresAt);
+
+  if (expiresAt < new Date()) return null;
 
   return {
     code,
     tenantId: data.tenantId,
     email: data.email,
+    orgId: data.orgId,    // ← returned to signup page
     used: data.used,
+    expiresAt,
   };
 }
 
-export async function markInviteUsed(code: string) {
-  const ref = doc(db, "invites", code);
-  await updateDoc(ref, { used: true });
+/**
+ * Marks an invite as used after tenant completes signup.
+ */
+export async function markInviteUsed(code: string): Promise<void> {
+  const q = query(collection(db, "invites"), where("code", "==", code));
+  const snap = await getDocs(q);
+
+  if (!snap.empty) {
+    await updateDoc(doc(db, "invites", snap.docs[0].id), { used: true });
+  }
 }

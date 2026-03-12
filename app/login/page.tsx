@@ -1,13 +1,22 @@
 "use client";
 
+/**
+ * app/login/page.tsx  (UPDATED)
+ *
+ * Changes from original:
+ * - Uses updated getUserRole() which returns { role, orgId }
+ * - Checks org status — blocks "inactive" orgs with clear message
+ * - Adds "Create account" link for new companies
+ */
+
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { signInWithEmailAndPassword, AuthError } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
+import { getUserRole } from "@/lib/auth";
 import { Building2, Loader2, ArrowRight } from "lucide-react";
-
-type UserRole = "admin" | "tenant";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -23,21 +32,29 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      // 1️⃣ Sign in with Firebase Auth
+      // 1. Firebase Auth sign-in
       const cred = await signInWithEmailAndPassword(auth, email, password);
       const uid = cred.user.uid;
 
-      // 2️⃣ Fetch role from Firestore
-      const snap = await getDoc(doc(db, "users", uid));
-      if (!snap.exists()) {
-        throw new Error("Account not configured. Contact support.");
+      // 2. Get role + orgId (updated helper)
+      const { role, orgId } = await getUserRole(uid);
+
+      // 3. Check org status — only for admins
+      if (role === "admin") {
+        const orgSnap = await getDoc(doc(db, "orgs", orgId));
+        if (orgSnap.exists()) {
+          const orgStatus = orgSnap.data().status;
+          if (orgStatus === "inactive") {
+            setError(
+              "Your account is inactive. Please contact support or renew your subscription."
+            );
+            setLoading(false);
+            return;
+          }
+        }
       }
 
-      const data = snap.data();
-      const role = data?.role as UserRole | undefined;
-      if (!role) throw new Error("Invalid account role.");
-
-      // 3️⃣ Redirect based on role
+      // 4. Redirect by role
       switch (role) {
         case "admin":
           router.replace("/admin/dashboard");
@@ -47,11 +64,7 @@ export default function LoginPage() {
           break;
       }
     } catch (err) {
-      console.error(err);
-
-      // Type-safe error handling
       if (err instanceof Error) {
-        // Firebase Auth errors may have 'code'
         const authError = err as AuthError;
         if (authError.code === "auth/invalid-credential") {
           setError("Invalid email or password.");
@@ -77,17 +90,13 @@ export default function LoginPage() {
             <Building2 className="h-6 w-6 text-indigo-600" />
             Housify KE
           </div>
-          <p className="mt-2 text-sm text-gray-600">
-            Sign in to your dashboard
-          </p>
+          <p className="mt-2 text-sm text-gray-600">Sign in to your dashboard</p>
         </div>
 
         {/* Form */}
         <form onSubmit={handleLogin} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700">
-              Email
-            </label>
+            <label className="block text-sm font-medium text-gray-700">Email</label>
             <input
               type="email"
               required
@@ -99,9 +108,7 @@ export default function LoginPage() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700">
-              Password
-            </label>
+            <label className="block text-sm font-medium text-gray-700">Password</label>
             <input
               type="password"
               required
@@ -136,6 +143,13 @@ export default function LoginPage() {
             )}
           </button>
         </form>
+
+        <p className="mt-6 text-center text-sm text-gray-500">
+          Managing multiple properties?{" "}
+          <Link href="/register" className="text-indigo-600 hover:underline font-medium">
+            Create a company account
+          </Link>
+        </p>
       </div>
     </main>
   );
