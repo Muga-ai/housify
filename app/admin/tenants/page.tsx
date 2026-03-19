@@ -23,7 +23,7 @@ import {
   serverTimestamp, // ← ADDED
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import { useOrgContext } from "../layout"; // ← ADDED
+import { useOrgContext } from "@/lib/org-context"; // ← ADDED
 
 /* ================= TYPES ================= */
 

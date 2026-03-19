@@ -583,7 +583,7 @@ export default function TenantPaymentsPage() {
                 />
                 {formData.method === "mpesa" && (
                   <p className="text-xs text-gray-400 mt-1">
-                    Find this in your M-Pesa message e.g. "QHX4KLJP2N Confirmed"
+                    Find this in your M-Pesa message e.g. QHX4KLJP2N Confirmed
                   </p>
                 )}
               </div>

@@ -19,7 +19,7 @@ import {
   serverTimestamp,
 } from "firebase/firestore";
 import { db, auth } from "@/lib/firebase";
-import { useOrgContext } from "../layout";
+import { useOrgContext } from "@/lib/org-context";
 import {
   CheckCircle,
   XCircle,

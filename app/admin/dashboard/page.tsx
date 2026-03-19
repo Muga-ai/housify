@@ -20,7 +20,7 @@ import {
   collection, getDocs, orderBy, limit, query, where,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import { useOrgContext } from "../layout";
+import { useOrgContext } from "@/lib/org-context";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from "recharts";
 import Link from "next/link"; // ← ADDED
 

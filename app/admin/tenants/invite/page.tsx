@@ -1,29 +1,20 @@
 "use client";
 
-/**
- * app/admin/tenants/invite/page.tsx  (UPDATED)
- *
- * Changes from original:
- * - Gets orgId from OrgContext
- * - Passes orgId to createTenantInvite() so tenants are scoped to the right org
- * - New tenant document gets orgId
- */
-
 import { useState } from "react";
 import { addDoc, collection, query, where, getDocs, serverTimestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { createTenantInvite } from "@/lib/invite";
-import { useOrgContext } from "../../layout";
+import { useOrgContext } from "@/lib/org-context"; // ← FIXED: was `import useOrgContext from "../../layout"`
 import { ClipboardCopy, Loader2 } from "lucide-react";
 
 export default function AdminTenantInvitePage() {
   const { orgId } = useOrgContext();
 
-  const [email, setEmail] = useState("");
-  const [name, setName] = useState("");
+  const [email,      setEmail]      = useState("");
+  const [name,       setName]       = useState("");
   const [inviteLink, setInviteLink] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
+  const [loading,    setLoading]    = useState(false);
+  const [error,      setError]      = useState("");
 
   const handleCreateInvite = async () => {
     setError("");
@@ -46,7 +37,7 @@ export default function AdminTenantInvitePage() {
       const q = query(
         collection(db, "tenants"),
         where("email", "==", email),
-        where("orgId", "==", orgId)           // ← scoped check
+        where("orgId", "==", orgId)
       );
       const snap = await getDocs(q);
 
@@ -58,19 +49,19 @@ export default function AdminTenantInvitePage() {
 
       // Create tenant record (pending, no unit yet)
       const tenantRef = await addDoc(collection(db, "tenants"), {
-        name: name.trim(),
-        email: email.trim(),
+        name:       name.trim(),
+        email:      email.trim(),
         propertyId: null,
-        unitId: null,
-        status: "pending",
-        orgId,                               // ← scoped to org
-        createdAt: serverTimestamp(),
+        unitId:     null,
+        status:     "pending",
+        orgId,
+        createdAt:  serverTimestamp(),
       });
 
-      // Create invite token (now includes orgId)
+      // Create invite token
       const code = await createTenantInvite(tenantRef.id, email, orgId);
-
       setInviteLink(`${window.location.origin}/signup/${code}`);
+
     } catch {
       setError("Failed to create invite.");
     } finally {
@@ -87,8 +78,8 @@ export default function AdminTenantInvitePage() {
       <h1 className="text-2xl font-bold">Invite Tenant</h1>
 
       <p className="text-sm text-gray-600">
-        An invite link will be generated. Share it with your tenant so they can create
-        their own login and access their unit dashboard.
+        An invite link will be generated. Share it with your tenant so they can
+        create their own login and access their unit dashboard.
       </p>
 
       {error && (

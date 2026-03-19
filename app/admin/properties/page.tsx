@@ -15,7 +15,7 @@ import {
   collection, getDocs, addDoc, updateDoc, deleteDoc, doc, query, where, serverTimestamp,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import { useOrgContext } from "../layout";
+import { useOrgContext } from "@/lib/org-context";
 
 interface Property { id: string; name: string; location: string; }
 interface Unit { id: string; propertyId: string; }

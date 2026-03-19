@@ -3,51 +3,30 @@
 /**
  * app/admin/layout.tsx
  *
- * Changes from previous:
- * - Added "Payments" to NAV_ITEMS with Receipt icon
- * - Everything else identical
+ * Fix: OrgContext and useOrgContext moved to lib/org-context.ts
+ * This file now only exports `default` which Next.js 16 requires.
+ * All child pages import useOrgContext from "@/lib/org-context" instead.
  */
 
-import { useEffect, useState, createContext, useContext } from "react";
+import { useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { signOut } from "firebase/auth";
 import { auth } from "@/lib/firebase";
 import { useOrg, Org } from "@/lib/org";
+import { OrgContext } from "@/lib/org-context";  // ← MOVED HERE
 import Link from "next/link";
 import {
-  Building2,
-  Users,
-  Home,
-  LogOut,
-  Wrench,
-  Menu,
-  X,
-  Loader2,
-  AlertTriangle,
-  Receipt, // ← ADDED
+  Building2, Users, Home, LogOut, Wrench,
+  Menu, X, Loader2, AlertTriangle, Receipt,
 } from "lucide-react";
 
-/* ── Org Context ── */
-interface OrgContextValue {
-  orgId: string;
-  org: Org;
-}
-export const OrgContext = createContext<OrgContextValue | null>(null);
-
-export function useOrgContext(): OrgContextValue {
-  const ctx = useContext(OrgContext);
-  if (!ctx) throw new Error("useOrgContext must be used inside AdminLayout");
-  return ctx;
-}
-
-/* ── Nav items — UPDATED: added Payments ── */
 const NAV_ITEMS = [
-  { title: "Dashboard",   href: "/admin/dashboard",   icon: <Home     className="h-5 w-5" /> },
+  { title: "Dashboard",   href: "/admin/dashboard",   icon: <Home      className="h-5 w-5" /> },
   { title: "Properties",  href: "/admin/properties",  icon: <Building2 className="h-5 w-5" /> },
   { title: "Units",       href: "/admin/units",       icon: <Building2 className="h-5 w-5" /> },
-  { title: "Tenants",     href: "/admin/tenants",     icon: <Users    className="h-5 w-5" /> },
-  { title: "Maintenance", href: "/admin/maintenance", icon: <Wrench   className="h-5 w-5" /> },
-  { title: "Payments",    href: "/admin/payments",    icon: <Receipt  className="h-5 w-5" /> }, // ← ADDED
+  { title: "Tenants",     href: "/admin/tenants",     icon: <Users     className="h-5 w-5" /> },
+  { title: "Maintenance", href: "/admin/maintenance", icon: <Wrench    className="h-5 w-5" /> },
+  { title: "Payments",    href: "/admin/payments",    icon: <Receipt   className="h-5 w-5" /> },
 ];
 
 const PLAN_BADGE: Record<string, string> = {
@@ -120,7 +99,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   return (
     <OrgContext.Provider value={{ orgId, org }}>
       <div className="flex min-h-screen bg-gray-50 relative">
-        {/* Mobile overlay */}
+
         {isOpen && (
           <div
             onClick={() => setIsOpen(false)}
@@ -128,7 +107,6 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           />
         )}
 
-        {/* Sidebar */}
         <aside
           className={`
             fixed z-50 inset-y-0 left-0 w-64 bg-white border-r
@@ -137,7 +115,6 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             md:translate-x-0 md:static md:flex md:flex-col
           `}
         >
-          {/* Logo + org name */}
           <div className="px-6 py-6 border-b">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2 font-bold text-lg">
@@ -192,7 +169,6 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           </div>
         </aside>
 
-        {/* Main */}
         <div className="flex-1 flex flex-col w-full">
           <header className="bg-white border-b px-4 py-3 flex justify-between items-center md:hidden">
             <button onClick={() => setIsOpen(true)}>
