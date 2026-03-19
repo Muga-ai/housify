@@ -3,48 +3,48 @@
 /**
  * app/admin/units/page.tsx
  *
- * Changes from previous:
- * - Renamed `rent` → `rentAmount` to match payment system expectations
- * - Added `rentDueDay` field (day of month rent is due, 1–28)
- * - Both fields saved to Firestore and displayed in the table
- * - Everything else identical
+ * Fix: when a tenant is assigned to a unit (create or edit),
+ * the tenant's document is also updated with unitId + propertyId.
+ * Previously only the unit document was updated, leaving the tenant
+ * dashboard unable to find the unit or property.
  */
 
 import { useEffect, useState } from "react";
 import { Plus, Pencil, Loader2 } from "lucide-react";
 import {
-  collection, getDocs, addDoc, updateDoc, doc, query, where, serverTimestamp,
+  collection, getDocs, addDoc, updateDoc,
+  doc, query, where, serverTimestamp, writeBatch,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useOrgContext } from "@/lib/org-context";
 
 interface Property { id: string; name: string; }
-interface Tenant   { id: string; name: string; status: string; }
+interface Tenant   { id: string; name: string; status: string; unitId?: string | null; }
 interface Unit {
   id: string;
   propertyId: string;
   unitNumber: string;
-  rentAmount: number;      // ← RENAMED from `rent`
-  rentDueDay: number;      // ← ADDED
+  rentAmount: number;
+  rentDueDay: number;
   tenantId?: string | null;
   status: "vacant" | "occupied";
 }
 
 export default function AdminUnitsPage() {
   const { orgId } = useOrgContext();
-  const [units,      setUnits]      = useState<Unit[]>([]);
-  const [properties, setProperties] = useState<Property[]>([]);
-  const [tenants,    setTenants]    = useState<Tenant[]>([]);
-  const [loading,    setLoading]    = useState(true);
-  const [showForm,   setShowForm]   = useState(false);
+  const [units,       setUnits]       = useState<Unit[]>([]);
+  const [properties,  setProperties]  = useState<Property[]>([]);
+  const [tenants,     setTenants]     = useState<Tenant[]>([]);
+  const [loading,     setLoading]     = useState(true);
+  const [showForm,    setShowForm]    = useState(false);
   const [editingUnit, setEditingUnit] = useState<Unit | null>(null);
 
   const [formData, setFormData] = useState({
     propertyId: "",
     unitNumber: "",
-    rentAmount: "",   // ← RENAMED
-    rentDueDay: "1",  // ← ADDED: default 1st of month
-    tenantId: "",
+    rentAmount: "",
+    rentDueDay: "1",
+    tenantId:   "",
   });
 
   useEffect(() => {
@@ -69,76 +69,135 @@ export default function AdminUnitsPage() {
     fetchData();
   }, [orgId]);
 
+  /* ── SAVE UNIT ─────────────────────────────────────────────────── */
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const assignedTenant = formData.tenantId || null;
-    const status = assignedTenant ? "occupied" : "vacant";
+
+    const newTenantId  = formData.tenantId || null;
+    const prevTenantId = editingUnit?.tenantId || null;
+    const status       = newTenantId ? "occupied" : "vacant";
+    const unitId       = editingUnit?.id ?? null;
 
     try {
+      // Use a batch so unit + tenant docs update atomically
+      const batch = writeBatch(db);
+
       if (editingUnit) {
-        await updateDoc(doc(db, "units", editingUnit.id), {
-          propertyId:  formData.propertyId,
-          unitNumber:  formData.unitNumber.trim(),
-          rentAmount:  Number(formData.rentAmount),   // ← RENAMED
-          rentDueDay:  Number(formData.rentDueDay),   // ← ADDED
-          tenantId:    assignedTenant,
+        /* ── EDIT existing unit ── */
+        const unitRef = doc(db, "units", editingUnit.id);
+        batch.update(unitRef, {
+          propertyId: formData.propertyId,
+          unitNumber: formData.unitNumber.trim(),
+          rentAmount: Number(formData.rentAmount),
+          rentDueDay: Number(formData.rentDueDay),
+          tenantId:   newTenantId,
           status,
         });
+
+        // If tenant changed — clear the OLD tenant's unit reference
+        if (prevTenantId && prevTenantId !== newTenantId) {
+          batch.update(doc(db, "tenants", prevTenantId), {
+            unitId:     null,
+            propertyId: null,
+          });
+        }
+
+        // Stamp unitId + propertyId on the NEW tenant
+        if (newTenantId && newTenantId !== prevTenantId) {
+          batch.update(doc(db, "tenants", newTenantId), {
+            unitId:     editingUnit.id,
+            propertyId: formData.propertyId,
+          });
+        }
+
+        // If unit was cleared (unassigned) but same tenant still referenced
+        if (!newTenantId && prevTenantId) {
+          batch.update(doc(db, "tenants", prevTenantId), {
+            unitId:     null,
+            propertyId: null,
+          });
+        }
+
+      } else {
+        /* ── CREATE new unit ── */
+        const newUnitRef = doc(collection(db, "units"));
+        batch.set(newUnitRef, {
+          propertyId: formData.propertyId,
+          unitNumber: formData.unitNumber.trim(),
+          rentAmount: Number(formData.rentAmount),
+          rentDueDay: Number(formData.rentDueDay),
+          tenantId:   newTenantId,
+          status,
+          orgId,
+          createdAt:  serverTimestamp(),
+        });
+
+        // Stamp unitId + propertyId on the assigned tenant
+        if (newTenantId) {
+          batch.update(doc(db, "tenants", newTenantId), {
+            unitId:     newUnitRef.id,
+            propertyId: formData.propertyId,
+          });
+        }
+      }
+
+      await batch.commit();
+
+      // ── Update local state ──
+      if (editingUnit) {
         setUnits((prev) =>
           prev.map((u) =>
             u.id === editingUnit.id
               ? {
                   ...u,
-                  propertyId:  formData.propertyId,
-                  unitNumber:  formData.unitNumber,
-                  rentAmount:  Number(formData.rentAmount),
-                  rentDueDay:  Number(formData.rentDueDay),
-                  tenantId:    assignedTenant,
+                  propertyId: formData.propertyId,
+                  unitNumber: formData.unitNumber,
+                  rentAmount: Number(formData.rentAmount),
+                  rentDueDay: Number(formData.rentDueDay),
+                  tenantId:   newTenantId,
                   status,
                 }
               : u
           )
         );
+        // Update tenant local state too
+        setTenants((prev) =>
+          prev.map((t) => {
+            if (t.id === prevTenantId && prevTenantId !== newTenantId)
+              return { ...t, unitId: null };
+            if (t.id === newTenantId)
+              return { ...t, unitId: editingUnit.id };
+            return t;
+          })
+        );
       } else {
-        const ref = await addDoc(collection(db, "units"), {
-          propertyId:  formData.propertyId,
-          unitNumber:  formData.unitNumber.trim(),
-          rentAmount:  Number(formData.rentAmount),   // ← RENAMED
-          rentDueDay:  Number(formData.rentDueDay),   // ← ADDED
-          tenantId:    assignedTenant,
-          status,
-          orgId,
-          createdAt:   serverTimestamp(),
-        });
-        setUnits((prev) => [
-          ...prev,
-          {
-            id:          ref.id,
-            propertyId:  formData.propertyId,
-            unitNumber:  formData.unitNumber,
-            rentAmount:  Number(formData.rentAmount),
-            rentDueDay:  Number(formData.rentDueDay),
-            tenantId:    assignedTenant,
-            status,
-          },
-        ]);
+        // Re-fetch units to get the server-generated ID
+        const unitSnap = await getDocs(
+          query(collection(db, "units"), where("orgId", "==", orgId))
+        );
+        setUnits(unitSnap.docs.map((d) => ({ id: d.id, ...d.data() } as Unit)));
       }
+
       setFormData({ propertyId: "", unitNumber: "", rentAmount: "", rentDueDay: "1", tenantId: "" });
       setEditingUnit(null);
       setShowForm(false);
+
     } catch (err) {
       console.error(err);
-      alert("Failed to save unit");
+      alert("Failed to save unit. Please try again.");
     }
   };
 
+  /* ── HELPERS ── */
+
+  // Only show tenants not already assigned to a DIFFERENT unit
   const availableTenants = tenants.filter(
     (t) =>
       (t.status === "active" || t.status === "pending") &&
-      !units.some((u) => u.tenantId === t.id && u.id !== editingUnit?.id)
+      (!t.unitId || t.unitId === editingUnit?.id)
   );
 
-  /* ── Ordinal suffix helper ── */
   const ordinal = (n: number) => {
     if (n === 1) return "1st";
     if (n === 2) return "2nd";
@@ -146,9 +205,12 @@ export default function AdminUnitsPage() {
     return `${n}th`;
   };
 
+  /* ── RENDER ── */
+
   return (
     <main className="min-h-screen bg-gray-50 p-6">
       <div className="mx-auto max-w-7xl space-y-6">
+
         <header className="flex items-center justify-between">
           <h1 className="text-3xl font-bold text-gray-900">Units</h1>
           <button
@@ -195,9 +257,7 @@ export default function AdminUnitsPage() {
                         <td className="px-6 py-3">{property?.name || "-"}</td>
                         <td className="px-6 py-3 font-medium">{unit.unitNumber}</td>
                         <td className="px-6 py-3">{tenant?.name || "Unassigned"}</td>
-                        <td className="px-6 py-3">
-                          {unit.rentAmount?.toLocaleString() ?? "-"}
-                        </td>
+                        <td className="px-6 py-3">{unit.rentAmount?.toLocaleString() ?? "-"}</td>
                         <td className="px-6 py-3 text-gray-500">
                           {unit.rentDueDay ? ordinal(unit.rentDueDay) : "-"}
                         </td>
@@ -217,11 +277,11 @@ export default function AdminUnitsPage() {
                             onClick={() => {
                               setEditingUnit(unit);
                               setFormData({
-                                propertyId:  unit.propertyId,
-                                unitNumber:  unit.unitNumber,
-                                rentAmount:  String(unit.rentAmount ?? ""),
-                                rentDueDay:  String(unit.rentDueDay ?? 1),
-                                tenantId:    unit.tenantId || "",
+                                propertyId: unit.propertyId,
+                                unitNumber: unit.unitNumber,
+                                rentAmount: String(unit.rentAmount ?? ""),
+                                rentDueDay: String(unit.rentDueDay ?? 1),
+                                tenantId:   unit.tenantId || "",
                               });
                               setShowForm(true);
                             }}
@@ -243,13 +303,13 @@ export default function AdminUnitsPage() {
       {/* MODAL */}
       {showForm && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-2xl max-w-xl w-full p-8 space-y-6">
+          <div className="bg-white rounded-2xl max-w-xl w-full p-8 space-y-5">
             <h2 className="text-xl font-bold">
               {editingUnit ? "Edit Unit" : "Add Unit"}
             </h2>
+
             <form onSubmit={handleSubmit} className="space-y-4">
 
-              {/* Property */}
               <select
                 required
                 value={formData.propertyId}
@@ -262,7 +322,6 @@ export default function AdminUnitsPage() {
                 ))}
               </select>
 
-              {/* Unit number */}
               <input
                 required
                 placeholder="Unit Number (e.g. A1, 101)"
@@ -271,7 +330,6 @@ export default function AdminUnitsPage() {
                 className="w-full rounded-lg border px-4 py-3"
               />
 
-              {/* Rent amount */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Monthly Rent (KES)
@@ -287,7 +345,6 @@ export default function AdminUnitsPage() {
                 />
               </div>
 
-              {/* Rent due day */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Rent Due Day (day of month)
@@ -299,34 +356,42 @@ export default function AdminUnitsPage() {
                   className="w-full rounded-lg border px-4 py-3"
                 >
                   {Array.from({ length: 28 }, (_, i) => i + 1).map((d) => (
-                    <option key={d} value={d}>
-                      {ordinal(d)} of every month
-                    </option>
+                    <option key={d} value={d}>{ordinal(d)} of every month</option>
                   ))}
                 </select>
               </div>
 
-              {/* Assign tenant */}
-              <select
-                value={formData.tenantId}
-                onChange={(e) => setFormData({ ...formData, tenantId: e.target.value })}
-                className="w-full rounded-lg border px-4 py-3"
-              >
-                <option value="">Unassigned</option>
-                {availableTenants.map((t) => (
-                  <option key={t.id} value={t.id}>{t.name}</option>
-                ))}
-              </select>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Assign Tenant (optional)
+                </label>
+                <select
+                  value={formData.tenantId}
+                  onChange={(e) => setFormData({ ...formData, tenantId: e.target.value })}
+                  className="w-full rounded-lg border px-4 py-3"
+                >
+                  <option value="">Unassigned</option>
+                  {availableTenants.map((t) => (
+                    <option key={t.id} value={t.id}>{t.name}</option>
+                  ))}
+                </select>
+                <p className="text-xs text-gray-400 mt-1">
+                  Assigning a tenant here updates their dashboard with rent details automatically.
+                </p>
+              </div>
 
-              <div className="flex justify-end gap-4 pt-4">
+              <div className="flex justify-end gap-4 pt-2">
                 <button
                   type="button"
                   onClick={() => { setShowForm(false); setEditingUnit(null); }}
-                  className="border px-6 py-3 rounded-lg"
+                  className="border px-6 py-3 rounded-lg text-gray-700"
                 >
                   Cancel
                 </button>
-                <button type="submit" className="bg-indigo-600 text-white px-6 py-3 rounded-lg">
+                <button
+                  type="submit"
+                  className="bg-indigo-600 text-white px-6 py-3 rounded-lg hover:bg-indigo-700"
+                >
                   Save Unit
                 </button>
               </div>
