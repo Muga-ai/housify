@@ -1,22 +1,24 @@
 "use client";
 
 /**
- * app/signup/pending/page.tsx  (NEW)
+ * app/register/pending/page.tsx
  *
- * Shown right after company signup.
- * Currently routes straight to dashboard (trial mode).
- * Later: swap the CTA to a Pesapal payment link.
+ * This file should exist at BOTH:
+ *   app/register/pending/page.tsx  ← signup page redirects here
+ *   app/signup/pending/page.tsx    ← keep this too for safety
+ *
+ * The signup page does: router.replace("/register/pending")
+ * so this file must live at app/register/pending/page.tsx
  */
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Building2, CheckCircle, ArrowRight } from "lucide-react";
+import { ArrowRight, CheckCircle } from "lucide-react";
 
-export default function SignupPendingPage() {
+export default function RegisterPendingPage() {
   const router = useRouter();
 
-  // Auto-redirect to dashboard after 4 seconds
   useEffect(() => {
     const t = setTimeout(() => router.replace("/admin/dashboard"), 4000);
     return () => clearTimeout(t);
@@ -32,8 +34,8 @@ export default function SignupPendingPage() {
         <div>
           <h1 className="text-3xl font-bold mb-3">You are all set!</h1>
           <p className="text-white/50 leading-relaxed">
-            Your 14-day free trial has started. Explore the dashboard, add your
-            properties, and invite your tenants — no limits during your trial.
+            Your 14-day free trial has started. Add your properties, create
+            units, and invite your tenants — no limits during your trial.
           </p>
         </div>
 
@@ -42,9 +44,9 @@ export default function SignupPendingPage() {
             What is next
           </p>
           <Step num={1} text="Add your first property" />
-          <Step num={2} text="Create units and assign rent amounts" />
+          <Step num={2} text="Create units with rent amounts and due dates" />
           <Step num={3} text="Invite tenants via email" />
-          <Step num={4} text="Track maintenance requests" />
+          <Step num={4} text="Track rent payments and maintenance" />
         </div>
 
         <Link
@@ -55,9 +57,7 @@ export default function SignupPendingPage() {
           <ArrowRight className="h-5 w-5" />
         </Link>
 
-        <p className="text-xs text-white/20">
-          Redirecting automatically in a few seconds…
-        </p>
+        <p className="text-xs text-white/20">Redirecting automatically in a few seconds…</p>
       </div>
     </main>
   );

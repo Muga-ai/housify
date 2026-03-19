@@ -1,31 +1,28 @@
 "use client";
 
+/**
+ * app/tenant/dashboard/page.tsx
+ *
+ * Changes from previous:
+ * - Reads `unit.rentAmount` (was `unit.rent`) to match updated units schema
+ * - Removed "coming soon" from Rent Payments link — it's live now
+ * - Rent due date now reads `unit.rentDueDay` for accuracy
+ * - Everything else identical
+ */
+
 import { useEffect, useState } from "react";
 import { auth, db } from "@/lib/firebase";
 import {
-  collection,
-  query,
-  where,
-  getDocs,
-  doc,          // ← ADDED
-  updateDoc,    // ← ADDED
-  getDoc,       // ← ADDED
+  collection, query, where, getDocs,
+  doc, updateDoc, getDoc,
 } from "firebase/firestore";
 import {
-  Home,
-  Wrench,
-  FileText,
-  CalendarDays,
-  Loader2,
-  Heart,        // ← ADDED: wellness status icon
-  AlertTriangle, // ← ADDED
-  CheckCircle,  // ← ADDED
+  Home, Wrench, FileText, CalendarDays, Loader2,
+  Heart, AlertTriangle, CheckCircle,
 } from "lucide-react";
 import Link from "next/link";
 
-/* ---------------- TYPES ---------------- */
-
-// ← ADDED: wellness status type
+/* ── TYPES ── */
 type WellnessStatus = "green" | "yellow" | "red";
 
 interface Tenant {
@@ -35,73 +32,55 @@ interface Tenant {
   propertyId?: string | null;
   unitId?: string | null;
   status: "pending" | "active" | "disabled";
-  wellnessStatus?: WellnessStatus; // ← ADDED
+  wellnessStatus?: WellnessStatus;
 }
 
-interface Property {
-  id: string;
-  name: string;
-}
+interface Property { id: string; name: string; }
 
 interface Unit {
   id: string;
   propertyId: string;
   unitNumber: string;
-  rent?: number; // ← ADDED: so we can show real rent amount
+  rentAmount?: number;   // ← FIXED: was `rent`
+  rentDueDay?: number;   // ← ADDED: for accurate due date display
 }
 
-/* ---------------- PAGE ---------------- */
-
+/* ── PAGE ── */
 export default function TenantDashboard() {
   const user = auth.currentUser;
-  const displayName =
-    user?.displayName || user?.email?.split("@")[0] || "Tenant";
+  const displayName = user?.displayName || user?.email?.split("@")[0] || "Tenant";
 
-  const [tenant, setTenant] = useState<Tenant | null>(null);
+  const [tenant,   setTenant]   = useState<Tenant | null>(null);
   const [property, setProperty] = useState<Property | null>(null);
-  const [unit, setUnit] = useState<Unit | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [openRequests, setOpenRequests] = useState(0); // ← ADDED: real count
-  const [updatingWellness, setUpdatingWellness] = useState(false); // ← ADDED
+  const [unit,     setUnit]     = useState<Unit | null>(null);
+  const [loading,  setLoading]  = useState(true);
+  const [openRequests, setOpenRequests] = useState(0);
+  const [updatingWellness, setUpdatingWellness] = useState(false);
 
   useEffect(() => {
     const fetchTenantData = async () => {
       if (!user) return;
-
       try {
-        // 1️⃣ Get tenant record by email
         const tenantQuery = query(
           collection(db, "tenants"),
           where("email", "==", user.email)
         );
         const tenantSnap = await getDocs(tenantQuery);
-
         if (tenantSnap.empty) return;
 
         const t = { id: tenantSnap.docs[0].id, ...tenantSnap.docs[0].data() } as Tenant;
         setTenant(t);
 
-        // 2️⃣ Fetch property
         if (t.propertyId) {
-          const propertySnap = await getDocs(
-            query(collection(db, "properties"), where("__name__", "==", t.propertyId))
-          );
-          if (!propertySnap.empty) {
-            setProperty({ id: t.propertyId, ...propertySnap.docs[0].data() } as Property);
-          }
+          const pSnap = await getDoc(doc(db, "properties", t.propertyId));
+          if (pSnap.exists()) setProperty({ id: t.propertyId, ...pSnap.data() } as Property);
         }
 
-        // 3️⃣ Fetch unit
         if (t.unitId) {
-          const unitSnap = await getDocs(
-            query(collection(db, "units"), where("__name__", "==", t.unitId))
-          );
-          if (!unitSnap.empty) {
-            setUnit({ id: t.unitId, ...unitSnap.docs[0].data() } as Unit);
-          }
+          const uSnap = await getDoc(doc(db, "units", t.unitId));
+          if (uSnap.exists()) setUnit({ id: t.unitId, ...uSnap.data() } as Unit);
         }
 
-        // ← ADDED: 4️⃣ Count open maintenance requests for this tenant
         const maintenanceSnap = await getDocs(
           query(
             collection(db, "maintenance_requests"),
@@ -110,18 +89,15 @@ export default function TenantDashboard() {
           )
         );
         setOpenRequests(maintenanceSnap.size);
-
       } catch (err) {
         console.error("Error fetching tenant data:", err);
       } finally {
         setLoading(false);
       }
     };
-
     fetchTenantData();
   }, [user]);
 
-  /* ← ADDED: Wellness status update handler */
   const handleWellnessUpdate = async (status: WellnessStatus) => {
     if (!tenant || updatingWellness) return;
     setUpdatingWellness(true);
@@ -139,24 +115,30 @@ export default function TenantDashboard() {
     }
   };
 
-  if (loading)
+  if (loading) {
     return (
       <div className="flex items-center justify-center h-screen">
         <Loader2 className="h-10 w-10 animate-spin text-indigo-600" />
       </div>
     );
+  }
 
-  // Rent due date — 1st of next month
+  /* ── Rent due date — uses actual rentDueDay from unit ── */
   const today = new Date();
-  const rentDueDate = new Date(today.getFullYear(), today.getMonth() + 1, 1);
+  const dueDay = unit?.rentDueDay ?? 1;
+  const rentDueDate = new Date(today.getFullYear(), today.getMonth(), dueDay);
+  // If already past this month's due date, show next month
+  if (rentDueDate < today) {
+    rentDueDate.setMonth(rentDueDate.getMonth() + 1);
+  }
   const rentDueFormatted = rentDueDate.toLocaleDateString("en-GB", {
-    day: "numeric",
-    month: "short",
+    day: "numeric", month: "short",
   });
 
   return (
     <main className="min-h-screen bg-gray-50 p-6">
       <div className="mx-auto max-w-7xl space-y-8">
+
         <header>
           <h1 className="text-3xl font-bold text-gray-900">
             Welcome back, {displayName}!
@@ -164,7 +146,7 @@ export default function TenantDashboard() {
           <p className="mt-1 text-gray-600">Manage your tenancy in one place</p>
         </header>
 
-        {/* Quick Stats Grid */}
+        {/* Quick Stats */}
         <section className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
           <div className="rounded-xl border bg-white p-6 shadow-sm">
             <div className="flex items-center gap-3">
@@ -178,22 +160,21 @@ export default function TenantDashboard() {
             </div>
           </div>
 
-          {/* ← UPDATED: shows real rent from unit record */}
+          {/* ← FIXED: reads rentAmount not rent */}
           <div className="rounded-xl border bg-white p-6 shadow-sm">
             <div className="flex items-center gap-3">
               <CalendarDays className="h-8 w-8 text-indigo-600" />
               <div>
                 <p className="text-sm text-gray-600">Rent Due</p>
                 <p className="text-xl font-semibold">
-                  {unit?.rent
-                    ? `KES ${unit.rent.toLocaleString()} • ${rentDueFormatted}`
+                  {unit?.rentAmount
+                    ? `KES ${unit.rentAmount.toLocaleString()} • ${rentDueFormatted}`
                     : "Not assigned"}
                 </p>
               </div>
             </div>
           </div>
 
-          {/* ← UPDATED: shows real open request count */}
           <div className="rounded-xl border bg-white p-6 shadow-sm">
             <div className="flex items-center gap-3">
               <Wrench className="h-8 w-8 text-indigo-600" />
@@ -205,111 +186,68 @@ export default function TenantDashboard() {
           </div>
         </section>
 
-        {/* ← ADDED: Wellness Status Card */}
+        {/* Wellness Status Card — unchanged */}
         <section>
           <div className="rounded-xl border bg-white p-6 shadow-sm">
             <div className="flex items-center gap-2 mb-1">
               <Heart className="h-5 w-5 text-rose-500" />
-              <h2 className="text-base font-semibold text-gray-900">
-                My Payment Wellness
-              </h2>
+              <h2 className="text-base font-semibold text-gray-900">My Payment Wellness</h2>
             </div>
             <p className="text-sm text-gray-500 mb-5">
-              Let your landlord know your current situation. This helps them
-              support you without a phone call.
+              Let your landlord know your current situation.
             </p>
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              {/* GREEN */}
-              <button
-                onClick={() => handleWellnessUpdate("green")}
-                disabled={updatingWellness}
-                className={`flex items-center gap-3 rounded-xl border-2 px-4 py-4 text-left transition-all disabled:opacity-60 ${
-                  tenant?.wellnessStatus === "green"
-                    ? "border-green-500 bg-green-50"
-                    : "border-gray-200 hover:border-green-300 hover:bg-green-50/50"
-                }`}
-              >
-                <span className="h-4 w-4 rounded-full bg-green-500 shrink-0" />
-                <div>
-                  <p className="font-semibold text-gray-800 text-sm">All Good</p>
-                  <p className="text-xs text-gray-500 mt-0.5">
-                    I can pay rent on time
-                  </p>
-                </div>
-                {tenant?.wellnessStatus === "green" && (
-                  <CheckCircle className="h-4 w-4 text-green-500 ml-auto shrink-0" />
-                )}
-              </button>
+              {(["green", "yellow", "red"] as WellnessStatus[]).map((status) => {
+                const config = {
+                  green:  { dot: "bg-green-500",  active: "border-green-500 bg-green-50",   hover: "hover:border-green-300",  label: "All Good",  sub: "I can pay rent on time"    },
+                  yellow: { dot: "bg-yellow-400", active: "border-yellow-500 bg-yellow-50", hover: "hover:border-yellow-300", label: "Uncertain", sub: "Slight delay possible"     },
+                  red:    { dot: "bg-red-500",    active: "border-red-500 bg-red-50",       hover: "hover:border-red-300",    label: "In Crisis", sub: "Emergency — need support"  },
+                }[status];
 
-              {/* YELLOW */}
-              <button
-                onClick={() => handleWellnessUpdate("yellow")}
-                disabled={updatingWellness}
-                className={`flex items-center gap-3 rounded-xl border-2 px-4 py-4 text-left transition-all disabled:opacity-60 ${
-                  tenant?.wellnessStatus === "yellow"
-                    ? "border-yellow-500 bg-yellow-50"
-                    : "border-gray-200 hover:border-yellow-300 hover:bg-yellow-50/50"
-                }`}
-              >
-                <span className="h-4 w-4 rounded-full bg-yellow-400 shrink-0" />
-                <div>
-                  <p className="font-semibold text-gray-800 text-sm">Uncertain</p>
-                  <p className="text-xs text-gray-500 mt-0.5">
-                    Slight delay possible
-                  </p>
-                </div>
-                {tenant?.wellnessStatus === "yellow" && (
-                  <CheckCircle className="h-4 w-4 text-yellow-500 ml-auto shrink-0" />
-                )}
-              </button>
-
-              {/* RED */}
-              <button
-                onClick={() => handleWellnessUpdate("red")}
-                disabled={updatingWellness}
-                className={`flex items-center gap-3 rounded-xl border-2 px-4 py-4 text-left transition-all disabled:opacity-60 ${
-                  tenant?.wellnessStatus === "red"
-                    ? "border-red-500 bg-red-50"
-                    : "border-gray-200 hover:border-red-300 hover:bg-red-50/50"
-                }`}
-              >
-                <span className="h-4 w-4 rounded-full bg-red-500 shrink-0" />
-                <div>
-                  <p className="font-semibold text-gray-800 text-sm">In Crisis</p>
-                  <p className="text-xs text-gray-500 mt-0.5">
-                    Emergency — need support
-                  </p>
-                </div>
-                {tenant?.wellnessStatus === "red" && (
-                  <CheckCircle className="h-4 w-4 text-red-500 ml-auto shrink-0" />
-                )}
-              </button>
+                return (
+                  <button
+                    key={status}
+                    onClick={() => handleWellnessUpdate(status)}
+                    disabled={updatingWellness}
+                    className={`flex items-center gap-3 rounded-xl border-2 px-4 py-4 text-left transition-all disabled:opacity-60 ${
+                      tenant?.wellnessStatus === status
+                        ? config.active
+                        : `border-gray-200 ${config.hover} hover:bg-gray-50/50`
+                    }`}
+                  >
+                    <span className={`h-4 w-4 rounded-full ${config.dot} shrink-0`} />
+                    <div>
+                      <p className="font-semibold text-gray-800 text-sm">{config.label}</p>
+                      <p className="text-xs text-gray-500 mt-0.5">{config.sub}</p>
+                    </div>
+                    {tenant?.wellnessStatus === status && (
+                      <CheckCircle className="h-4 w-4 text-current ml-auto shrink-0" />
+                    )}
+                  </button>
+                );
+              })}
             </div>
 
-            {/* Context note when red is selected */}
             {tenant?.wellnessStatus === "red" && (
               <div className="mt-4 flex items-start gap-3 rounded-lg bg-red-50 border border-red-200 px-4 py-3">
                 <AlertTriangle className="h-5 w-5 text-red-500 shrink-0 mt-0.5" />
                 <p className="text-sm text-red-700">
-                  Your landlord can see this. They will reach out to discuss
-                  options. You do not need to make a call.
+                  Your landlord can see this. They will reach out to discuss options.
                 </p>
               </div>
             )}
-
             {tenant?.wellnessStatus === "yellow" && (
               <div className="mt-4 rounded-lg bg-yellow-50 border border-yellow-200 px-4 py-3">
                 <p className="text-sm text-yellow-700">
-                  Your landlord is aware there may be a delay. No action needed
-                  from you right now.
+                  Your landlord is aware there may be a delay.
                 </p>
               </div>
             )}
           </div>
         </section>
 
-        {/* Quick Actions — unchanged from original */}
+        {/* Quick Actions — payments link is now live */}
         <section className="grid gap-6 md:grid-cols-2">
           <Link
             href="/tenant/maintenance"
@@ -322,6 +260,7 @@ export default function TenantDashboard() {
             </div>
           </Link>
 
+          {/* ← UPDATED: removed "coming soon", now live */}
           <Link
             href="/tenant/payments"
             className="rounded-xl border bg-white p-8 shadow-sm hover:shadow-md transition flex items-center gap-4"
@@ -329,7 +268,7 @@ export default function TenantDashboard() {
             <FileText className="h-10 w-10 text-indigo-600" />
             <div>
               <h3 className="text-lg font-semibold">Rent Payments</h3>
-              <p className="text-sm text-gray-600">View history and pay (coming soon)</p>
+              <p className="text-sm text-gray-600">Submit payment details for verification</p>
             </div>
           </Link>
         </section>

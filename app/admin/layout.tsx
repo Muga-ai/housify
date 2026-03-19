@@ -1,13 +1,11 @@
 "use client";
 
 /**
- * app/admin/layout.tsx  (UPDATED)
+ * app/admin/layout.tsx
  *
- * Changes from original:
- * - Loads orgId via useOrg() hook and stores it in OrgContext
- * - All child pages read orgId from context — no prop drilling
- * - Shows org name and plan badge in sidebar
- * - Blocks access if org is inactive
+ * Changes from previous:
+ * - Added "Payments" to NAV_ITEMS with Receipt icon
+ * - Everything else identical
  */
 
 import { useEffect, useState, createContext, useContext } from "react";
@@ -26,9 +24,10 @@ import {
   X,
   Loader2,
   AlertTriangle,
+  Receipt, // ← ADDED
 } from "lucide-react";
 
-/* ── Org Context — consumed by all admin child pages ── */
+/* ── Org Context ── */
 interface OrgContextValue {
   orgId: string;
   org: Org;
@@ -41,23 +40,24 @@ export function useOrgContext(): OrgContextValue {
   return ctx;
 }
 
-/* ── Nav items ── */
+/* ── Nav items — UPDATED: added Payments ── */
 const NAV_ITEMS = [
-  { title: "Dashboard", href: "/admin/dashboard", icon: <Home className="h-5 w-5" /> },
-  { title: "Properties", href: "/admin/properties", icon: <Building2 className="h-5 w-5" /> },
-  { title: "Units", href: "/admin/units", icon: <Building2 className="h-5 w-5" /> },
-  { title: "Maintenance", href: "/admin/maintenance", icon: <Wrench className="h-5 w-5" /> },
-  { title: "Tenants", href: "/admin/tenants", icon: <Users className="h-5 w-5" /> },
+  { title: "Dashboard",   href: "/admin/dashboard",   icon: <Home     className="h-5 w-5" /> },
+  { title: "Properties",  href: "/admin/properties",  icon: <Building2 className="h-5 w-5" /> },
+  { title: "Units",       href: "/admin/units",       icon: <Building2 className="h-5 w-5" /> },
+  { title: "Tenants",     href: "/admin/tenants",     icon: <Users    className="h-5 w-5" /> },
+  { title: "Maintenance", href: "/admin/maintenance", icon: <Wrench   className="h-5 w-5" /> },
+  { title: "Payments",    href: "/admin/payments",    icon: <Receipt  className="h-5 w-5" /> }, // ← ADDED
 ];
 
 const PLAN_BADGE: Record<string, string> = {
   starter: "bg-gray-100 text-gray-600",
-  growth: "bg-indigo-100 text-indigo-700",
-  pro: "bg-amber-100 text-amber-700",
+  growth:  "bg-indigo-100 text-indigo-700",
+  pro:     "bg-amber-100 text-amber-700",
 };
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
-  const router = useRouter();
+  const router   = useRouter();
   const pathname = usePathname();
   const [isOpen, setIsOpen] = useState(false);
   const { orgId, org, loading, error } = useOrg();
@@ -74,7 +74,6 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     router.push("/login");
   };
 
-  // Loading state
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-gray-50">
@@ -83,7 +82,6 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     );
   }
 
-  // Org inactive / error
   if (error || !orgId || !org) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-gray-50 px-6">
@@ -102,7 +100,6 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     );
   }
 
-  // Org inactive
   if (org.status === "inactive") {
     return (
       <div className="flex items-center justify-center min-h-screen bg-gray-50 px-6">

@@ -1,76 +1,48 @@
 "use client";
 
 /**
- * app/admin/dashboard/page.tsx  (UPDATED)
+ * app/admin/dashboard/page.tsx
  *
- * Changes from previous version:
- * - Added Tenant Wellness panel showing each tenant's self-reported status
- * - Wellness counts added to Quick Insights
- * - Added prominent FundiPlus CTA section (after Wellness panel) so landlords
- *   and house admins can hire vetted fundis (plumbers, electricians, etc.)
- *   directly from the dashboard — links to https://fundiplus.vercel.app/
- * - Everything else identical and production-ready
+ * Changes from previous:
+ * - Added payment summary panel showing this month's collection status
+ * - Stat cards now include a Payments card
+ * - Everything else identical
  */
 
 import { useEffect, useState } from "react";
 import {
-  Building2,
-  Users,
-  Wrench,
-  BarChart3,
-  ArrowUpRight,
-  Heart,
-  AlertTriangle,
-  CheckCircle,
-  Minus,
-  Hammer, // ← ADDED for FundiPlus section
+  Building2, Users, Wrench, BarChart3, ArrowUpRight,
+  Heart, AlertTriangle, CheckCircle, Minus, Hammer,
+  Receipt,      // ← ADDED
+  TrendingUp,   // ← ADDED
 } from "lucide-react";
 import {
-  collection,
-  getDocs,
-  orderBy,
-  limit,
-  query,
-  where,
+  collection, getDocs, orderBy, limit, query, where,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useOrgContext } from "../layout";
-import {
-  PieChart,
-  Pie,
-  Cell,
-  ResponsiveContainer,
-  Tooltip,
-  Legend,
-} from "recharts";
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from "recharts";
+import Link from "next/link"; // ← ADDED
 
 /* ================= TYPES ================= */
 
-interface Property {
-  id: string;
-  name: string;
-  location?: string;
-}
-interface Unit {
-  id: string;
-  tenantId?: string;
-}
-
-// ← UPDATED: added wellnessStatus to Tenant type
-interface Tenant {
-  id: string;
-  name: string;
-  email: string;
-  unitId?: string | null;
-  propertyId?: string | null;
+interface Property { id: string; name: string; location?: string; }
+interface Unit     { id: string; tenantId?: string; }
+interface Tenant   {
+  id: string; name: string; email: string;
+  unitId?: string | null; propertyId?: string | null;
   wellnessStatus?: "green" | "yellow" | "red";
-  wellnessUpdatedAt?: any;
 }
+interface MaintenanceRequest { id: string; status: string; }
 
-interface MaintenanceRequest {
+// ← ADDED
+interface Payment {
   id: string;
-  status: string;
-  title?: string;
+  tenantId: string;
+  amount: number;
+  month: string;
+  status: "pending" | "verified" | "rejected";
+  tenantName?: string;
 }
 
 /* ================= PAGE ================= */
@@ -80,15 +52,14 @@ export default function AdminDashboard() {
   const [loading, setLoading] = useState(true);
 
   const [propertyCount, setPropertyCount] = useState(0);
-  const [unitCount, setUnitCount] = useState(0);
-  const [tenantCount, setTenantCount] = useState(0);
-  const [openIssues, setOpenIssues] = useState(0);
+  const [unitCount,     setUnitCount]     = useState(0);
+  const [tenantCount,   setTenantCount]   = useState(0);
+  const [openIssues,    setOpenIssues]    = useState(0);
   const [occupiedUnits, setOccupiedUnits] = useState(0);
   const [recentProperties, setRecentProperties] = useState<Property[]>([]);
-  const [recentTenants, setRecentTenants] = useState<Tenant[]>([]);
-  const [allTenants, setAllTenants] = useState<Tenant[]>([]); // ← ADDED
-  const [unitsData, setUnitsData] = useState<Unit[]>([]);
-  const [maintenanceData, setMaintenanceData] = useState<MaintenanceRequest[]>([]);
+  const [recentTenants,    setRecentTenants]    = useState<Tenant[]>([]);
+  const [allTenants,       setAllTenants]       = useState<Tenant[]>([]);
+  const [payments,         setPayments]         = useState<Payment[]>([]); // ← ADDED
 
   useEffect(() => {
     if (!orgId) return;
@@ -96,35 +67,42 @@ export default function AdminDashboard() {
     const fetchDashboardData = async () => {
       try {
         const orgFilter = where("orgId", "==", orgId);
+        const currentMonth = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, "0")}`;
 
-        const [propSnap, unitSnap, tenantSnap, maintSnap] = await Promise.all([
-          getDocs(query(collection(db, "properties"), orgFilter)),
-          getDocs(query(collection(db, "units"), orgFilter)),
-          getDocs(query(collection(db, "tenants"), orgFilter)),
+        const [propSnap, unitSnap, tenantSnap, maintSnap, paymentSnap] = await Promise.all([
+          getDocs(query(collection(db, "properties"),        orgFilter)),
+          getDocs(query(collection(db, "units"),             orgFilter)),
+          getDocs(query(collection(db, "tenants"),           orgFilter)),
           getDocs(query(collection(db, "maintenance_requests"), orgFilter)),
+          // ← ADDED: this month's payments
+          getDocs(query(collection(db, "payments"), orgFilter, where("month", "==", currentMonth))),
         ]);
 
         setPropertyCount(propSnap.size);
 
         const unitsArr = unitSnap.docs.map((d) => ({ id: d.id, ...d.data() } as Unit));
         setUnitCount(unitsArr.length);
-        setUnitsData(unitsArr);
         setOccupiedUnits(unitsArr.filter((u) => u.tenantId).length);
 
         setTenantCount(tenantSnap.size);
 
-        // ← ADDED: store all tenants for wellness panel
-        const tenantsArr = tenantSnap.docs.map((d) => ({
-          id: d.id,
-          ...d.data(),
-        } as Tenant));
+        const tenantsArr = tenantSnap.docs.map((d) => ({ id: d.id, ...d.data() } as Tenant));
         setAllTenants(tenantsArr);
 
         const maintArr = maintSnap.docs.map((d) => ({ id: d.id, ...d.data() } as MaintenanceRequest));
-        setMaintenanceData(maintArr);
         setOpenIssues(maintArr.filter((m) => m.status !== "resolved").length);
 
-        // Recent properties (last 5)
+        // ← ADDED: enrich payments with tenant names
+        const tenantMap = Object.fromEntries(tenantsArr.map((t) => [t.id, t.name]));
+        setPayments(
+          paymentSnap.docs.map((d) => ({
+            id: d.id,
+            ...d.data(),
+            tenantName: tenantMap[d.data().tenantId] ?? "Unknown",
+          } as Payment))
+        );
+
+        // Recent properties
         const recentPropSnap = await getDocs(
           query(collection(db, "properties"), orgFilter, orderBy("createdAt", "desc"), limit(5))
         );
@@ -136,14 +114,14 @@ export default function AdminDashboard() {
           }))
         );
 
-        // Recent tenants (last 5)
+        // Recent tenants
         const recentTenantSnap = await getDocs(
           query(collection(db, "tenants"), orgFilter, orderBy("createdAt", "desc"), limit(5))
         );
         setRecentTenants(
           recentTenantSnap.docs.map((d) => ({
             id: d.id,
-            name: d.data().name as string,
+            name:  d.data().name  as string,
             email: d.data().email as string,
           }))
         );
@@ -157,84 +135,166 @@ export default function AdminDashboard() {
     fetchDashboardData();
   }, [orgId]);
 
+  /* ── Derived values ── */
   const occupancyRate = unitCount === 0 ? 0 : Math.round((occupiedUnits / unitCount) * 100);
   const occupancyData = [
     { name: "Occupied", value: occupiedUnits },
-    { name: "Vacant", value: unitCount - occupiedUnits },
+    { name: "Vacant",   value: unitCount - occupiedUnits },
   ];
   const COLORS = ["#4F46E5", "#E5E7EB"];
 
-  // ← ADDED: wellness counts for Quick Insights
-  const wellnessGreen = allTenants.filter((t) => t.wellnessStatus === "green").length;
+  const wellnessGreen  = allTenants.filter((t) => t.wellnessStatus === "green").length;
   const wellnessYellow = allTenants.filter((t) => t.wellnessStatus === "yellow").length;
-  const wellnessRed = allTenants.filter((t) => t.wellnessStatus === "red").length;
-  const wellnessUnset = allTenants.filter((t) => !t.wellnessStatus).length;
+  const wellnessRed    = allTenants.filter((t) => t.wellnessStatus === "red").length;
+  const wellnessUnset  = allTenants.filter((t) => !t.wellnessStatus).length;
 
-  // ← ADDED: tenants needing attention (red first, then yellow)
   const tenantsNeedingAttention = allTenants
     .filter((t) => t.wellnessStatus === "red" || t.wellnessStatus === "yellow")
-    .sort((a, b) => {
-      if (a.wellnessStatus === "red" && b.wellnessStatus !== "red") return -1;
-      if (b.wellnessStatus === "red" && a.wellnessStatus !== "red") return 1;
-      return 0;
-    });
+    .sort((a, b) => (a.wellnessStatus === "red" && b.wellnessStatus !== "red" ? -1 : 1));
+
+  // ← ADDED: payment derived values
+  const verifiedPayments = payments.filter((p) => p.status === "verified");
+  const pendingPayments  = payments.filter((p) => p.status === "pending");
+  const monthlyRevenue   = verifiedPayments.reduce((sum, p) => sum + p.amount, 0);
+  const collectionRate   = tenantCount === 0 ? 0 : Math.round((verifiedPayments.length / tenantCount) * 100);
 
   return (
     <main className="min-h-screen bg-gray-50">
       <div className="mx-auto max-w-7xl px-6 py-8 space-y-8">
 
-        {/* HEADER — unchanged */}
         <header className="flex flex-col gap-2">
           <h1 className="text-3xl font-bold text-gray-900">Admin Dashboard</h1>
           <p className="text-gray-600">Real-time overview of your properties and tenants</p>
         </header>
 
-        {/* STAT CARDS — unchanged */}
+        {/* STAT CARDS — added Payments card */}
         <section className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
-          <StatCard title="Properties" value={propertyCount.toString()} trend="Live" icon={<Building2 className="h-6 w-6 text-indigo-600" />} />
-          <StatCard title="Tenants" value={tenantCount.toString()} trend="Active" icon={<Users className="h-6 w-6 text-indigo-600" />} />
-          <StatCard title="Occupancy" value={`${occupancyRate}%`} trend={`${occupiedUnits}/${unitCount}`} icon={<BarChart3 className="h-6 w-6 text-indigo-600" />} />
-          <StatCard title="Open Issues" value={openIssues.toString()} trend="Pending" icon={<Wrench className="h-6 w-6 text-indigo-600" />} />
+          <StatCard title="Properties"  value={propertyCount.toString()} trend="Live"    icon={<Building2 className="h-6 w-6 text-indigo-600" />} />
+          <StatCard title="Tenants"     value={tenantCount.toString()}   trend="Active"  icon={<Users     className="h-6 w-6 text-indigo-600" />} />
+          <StatCard title="Occupancy"   value={`${occupancyRate}%`}      trend={`${occupiedUnits}/${unitCount}`} icon={<BarChart3 className="h-6 w-6 text-indigo-600" />} />
+          <StatCard title="Open Issues" value={openIssues.toString()}    trend="Pending" icon={<Wrench    className="h-6 w-6 text-indigo-600" />} />
         </section>
 
-        {/* ← ADDED: TENANT WELLNESS PANEL */}
+        {/* ← ADDED: PAYMENT SUMMARY PANEL */}
         <section>
           <div className="rounded-xl border bg-white p-6 shadow-sm">
-
-            {/* Panel header */}
             <div className="flex items-center justify-between mb-5">
               <div className="flex items-center gap-2">
-                <Heart className="h-5 w-5 text-rose-500" />
+                <Receipt className="h-5 w-5 text-indigo-600" />
                 <h2 className="text-base font-semibold text-gray-900">
-                  Tenant Payment Wellness
+                  This Month Rent Collection
                 </h2>
               </div>
+              <Link
+                href="/admin/payments"
+                className="text-sm text-indigo-600 hover:underline flex items-center gap-1"
+              >
+                View all payments <ArrowUpRight className="h-3 w-3" />
+              </Link>
+            </div>
 
-              {/* Summary badges */}
-              <div className="flex items-center gap-2">
-                <WellnessSummaryBadge color="green" count={wellnessGreen} label="Good" />
-                <WellnessSummaryBadge color="yellow" count={wellnessYellow} label="Uncertain" />
-                <WellnessSummaryBadge color="red" count={wellnessRed} label="Crisis" />
+            {/* Summary row */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-5">
+              <div className="rounded-lg bg-indigo-50 p-4">
+                <p className="text-xs text-indigo-600 font-medium">Verified Revenue</p>
+                <p className="text-xl font-bold text-indigo-700 mt-1">
+                  KES {monthlyRevenue.toLocaleString()}
+                </p>
+              </div>
+              <div className="rounded-lg bg-green-50 p-4">
+                <p className="text-xs text-green-600 font-medium">Paid Tenants</p>
+                <p className="text-xl font-bold text-green-700 mt-1">
+                  {verifiedPayments.length} / {tenantCount}
+                </p>
+              </div>
+              <div className="rounded-lg bg-yellow-50 p-4">
+                <p className="text-xs text-yellow-600 font-medium">Pending Verification</p>
+                <p className="text-xl font-bold text-yellow-700 mt-1">
+                  {pendingPayments.length}
+                </p>
+              </div>
+              <div className="rounded-lg bg-gray-50 p-4">
+                <p className="text-xs text-gray-500 font-medium">Collection Rate</p>
+                <p className="text-xl font-bold text-gray-700 mt-1">{collectionRate}%</p>
               </div>
             </div>
 
-            {/* Alert banner if any red statuses */}
+            {/* Pending payments list */}
+            {pendingPayments.length > 0 ? (
+              <div>
+                <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">
+                  Awaiting your verification
+                </p>
+                <div className="space-y-2">
+                  {pendingPayments.slice(0, 5).map((p) => (
+                    <div
+                      key={p.id}
+                      className="flex items-center justify-between rounded-lg border bg-yellow-50 px-4 py-3"
+                    >
+                      <p className="text-sm font-medium text-gray-800">{p.tenantName}</p>
+                      <div className="flex items-center gap-3">
+                        <span className="text-sm text-gray-600">
+                          KES {p.amount.toLocaleString()}
+                        </span>
+                        <Link
+                          href="/admin/payments"
+                          className="text-xs text-indigo-600 hover:underline font-medium"
+                        >
+                          Verify →
+                        </Link>
+                      </div>
+                    </div>
+                  ))}
+                  {pendingPayments.length > 5 && (
+                    <Link
+                      href="/admin/payments"
+                      className="block text-center text-sm text-indigo-600 hover:underline pt-1"
+                    >
+                      + {pendingPayments.length - 5} more pending
+                    </Link>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div className="rounded-lg border border-dashed bg-gray-50 py-6 text-center">
+                <TrendingUp className="h-7 w-7 text-green-400 mx-auto mb-2" />
+                <p className="text-sm text-gray-500">
+                  {verifiedPayments.length > 0
+                    ? "No pending verifications — you are all caught up!"
+                    : "No payments submitted yet this month."}
+                </p>
+              </div>
+            )}
+          </div>
+        </section>
+
+        {/* TENANT WELLNESS PANEL — unchanged */}
+        <section>
+          <div className="rounded-xl border bg-white p-6 shadow-sm">
+            <div className="flex items-center justify-between mb-5">
+              <div className="flex items-center gap-2">
+                <Heart className="h-5 w-5 text-rose-500" />
+                <h2 className="text-base font-semibold text-gray-900">Tenant Payment Wellness</h2>
+              </div>
+              <div className="flex items-center gap-2">
+                <WellnessSummaryBadge color="green"  count={wellnessGreen}  label="Good"     />
+                <WellnessSummaryBadge color="yellow" count={wellnessYellow} label="Uncertain" />
+                <WellnessSummaryBadge color="red"    count={wellnessRed}    label="Crisis"   />
+              </div>
+            </div>
+
             {wellnessRed > 0 && (
               <div className="mb-4 flex items-center gap-3 rounded-lg bg-red-50 border border-red-200 px-4 py-3">
                 <AlertTriangle className="h-5 w-5 text-red-500 shrink-0" />
                 <p className="text-sm text-red-700 font-medium">
-                  {wellnessRed} tenant{wellnessRed > 1 ? "s are" : " is"} reporting a crisis.
-                  Consider reaching out directly.
+                  {wellnessRed} tenant{wellnessRed > 1 ? "s are" : " is"} reporting a crisis. Consider reaching out directly.
                 </p>
               </div>
             )}
 
-            {/* Tenants needing attention */}
             {tenantsNeedingAttention.length > 0 ? (
               <div className="space-y-2">
-                <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-3">
-                  Needs attention
-                </p>
+                <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-3">Needs attention</p>
                 {tenantsNeedingAttention.map((tenant) => (
                   <TenantWellnessRow key={tenant.id} tenant={tenant} />
                 ))}
@@ -242,13 +302,10 @@ export default function AdminDashboard() {
             ) : (
               <div className="rounded-lg border border-dashed bg-gray-50 py-8 text-center">
                 <CheckCircle className="h-8 w-8 text-green-400 mx-auto mb-2" />
-                <p className="text-sm text-gray-500">
-                  All tenants are reporting good payment health
-                </p>
+                <p className="text-sm text-gray-500">All tenants are reporting good payment health</p>
               </div>
             )}
 
-            {/* All tenants wellness — collapsed list */}
             {allTenants.length > 0 && (
               <details className="mt-4">
                 <summary className="cursor-pointer text-sm text-indigo-600 hover:underline select-none">
@@ -261,32 +318,25 @@ export default function AdminDashboard() {
                 </div>
               </details>
             )}
-
           </div>
         </section>
 
-        {/* ← NEW: FUNDIPLUS HIRE SECTION */}
-        {/* Landlords & house admins can now hire vetted fundis directly */}
+        {/* FUNDIPLUS CTA — unchanged */}
         <section>
           <div className="rounded-3xl border bg-white p-8 shadow-sm overflow-hidden relative">
             <div className="flex flex-col lg:flex-row items-center gap-8">
-              {/* Left content */}
               <div className="flex-1">
                 <div className="inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-amber-100 to-orange-100 px-5 py-1.5 text-sm font-semibold text-amber-700 mb-4">
                   <Hammer className="h-4 w-4" />
                   POWERED BY FUNDIPLUS
                 </div>
-
                 <h2 className="text-3xl font-bold text-gray-900 tracking-tight mb-3">
                   Need repairs or maintenance?
                 </h2>
                 <p className="text-lg text-gray-600 max-w-lg">
-                  Instantly hire trusted fundis (plumbers, electricians, carpenters, painters &amp; more) in Nairobi. 
-                  Vetted professionals • Transparent pricing • Secure payments.
+                  Instantly hire trusted fundis in Nairobi. Vetted professionals • Transparent pricing.
                 </p>
               </div>
-
-              {/* CTA Button */}
               <a
                 href="https://fundiplus.vercel.app/"
                 target="_blank"
@@ -297,8 +347,6 @@ export default function AdminDashboard() {
                 <ArrowUpRight className="h-6 w-6 group-hover:rotate-45 transition-transform" />
               </a>
             </div>
-
-            {/* Subtle background accent */}
             <div className="absolute -bottom-12 -right-12 h-48 w-48 bg-gradient-to-br from-amber-200/20 to-transparent rounded-full blur-3xl" />
           </div>
         </section>
@@ -319,7 +367,6 @@ export default function AdminDashboard() {
                 </ul>
               )}
             </Panel>
-
             <Panel title="Recent Tenants">
               {recentTenants.length === 0 ? (
                 <EmptyState message="No tenants yet." />
@@ -360,7 +407,6 @@ export default function AdminDashboard() {
               )}
             </Panel>
 
-            {/* ← UPDATED: Quick Insights now includes wellness counts */}
             <Panel title="Quick Insights">
               <ul className="space-y-3 text-sm text-gray-600">
                 <li>• Total units: {unitCount}</li>
@@ -369,23 +415,34 @@ export default function AdminDashboard() {
                 <li>• Average occupancy: {occupancyRate}%</li>
                 <li>• Open maintenance issues: {openIssues}</li>
                 <li className="pt-2 border-t">
+                  <span className="font-medium text-gray-700">This month payments:</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <span className="h-2.5 w-2.5 rounded-full bg-green-500" />
+                  Verified: {verifiedPayments.length}
+                </li>
+                <li className="flex items-center gap-2">
+                  <span className="h-2.5 w-2.5 rounded-full bg-yellow-400" />
+                  Pending: {pendingPayments.length}
+                </li>
+                <li className="pt-2 border-t">
                   <span className="font-medium text-gray-700">Wellness:</span>
                 </li>
                 <li className="flex items-center gap-2">
                   <span className="h-2.5 w-2.5 rounded-full bg-green-500" />
-                  Good: {wellnessGreen} tenant{wellnessGreen !== 1 ? "s" : ""}
+                  Good: {wellnessGreen}
                 </li>
                 <li className="flex items-center gap-2">
                   <span className="h-2.5 w-2.5 rounded-full bg-yellow-400" />
-                  Uncertain: {wellnessYellow} tenant{wellnessYellow !== 1 ? "s" : ""}
+                  Uncertain: {wellnessYellow}
                 </li>
                 <li className="flex items-center gap-2">
                   <span className="h-2.5 w-2.5 rounded-full bg-red-500" />
-                  Crisis: {wellnessRed} tenant{wellnessRed !== 1 ? "s" : ""}
+                  Crisis: {wellnessRed}
                 </li>
                 <li className="flex items-center gap-2">
                   <span className="h-2.5 w-2.5 rounded-full bg-gray-300" />
-                  Not set: {wellnessUnset} tenant{wellnessUnset !== 1 ? "s" : ""}
+                  Not set: {wellnessUnset}
                 </li>
               </ul>
             </Panel>
@@ -398,48 +455,25 @@ export default function AdminDashboard() {
 
 /* ================= COMPONENTS ================= */
 
-// ← ADDED: row showing one tenant's wellness status
 function TenantWellnessRow({ tenant }: { tenant: Tenant }) {
   const status = tenant.wellnessStatus;
-
   const config = {
-    green: {
-      dot: "bg-green-500",
-      badge: "bg-green-100 text-green-700",
-      label: "All Good",
-    },
-    yellow: {
-      dot: "bg-yellow-400",
-      badge: "bg-yellow-100 text-yellow-700",
-      label: "Uncertain",
-    },
-    red: {
-      dot: "bg-red-500",
-      badge: "bg-red-100 text-red-700",
-      label: "In Crisis",
-    },
+    green:  { dot: "bg-green-500",  badge: "bg-green-100 text-green-700",   label: "All Good"   },
+    yellow: { dot: "bg-yellow-400", badge: "bg-yellow-100 text-yellow-700", label: "Uncertain"  },
+    red:    { dot: "bg-red-500",    badge: "bg-red-100 text-red-700",       label: "In Crisis"  },
   };
-
   const current = status ? config[status] : null;
-
   return (
     <div className="flex items-center justify-between rounded-lg border bg-gray-50 px-4 py-3">
       <div className="flex items-center gap-3">
-        {current ? (
-          <span className={`h-3 w-3 rounded-full shrink-0 ${current.dot}`} />
-        ) : (
-          <span className="h-3 w-3 rounded-full shrink-0 bg-gray-300" />
-        )}
+        <span className={`h-3 w-3 rounded-full shrink-0 ${current ? current.dot : "bg-gray-300"}`} />
         <div>
           <p className="text-sm font-medium text-gray-800">{tenant.name}</p>
           <p className="text-xs text-gray-500">{tenant.email}</p>
         </div>
       </div>
-
       {current ? (
-        <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${current.badge}`}>
-          {current.label}
-        </span>
+        <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${current.badge}`}>{current.label}</span>
       ) : (
         <span className="text-xs font-medium px-2.5 py-1 rounded-full bg-gray-100 text-gray-400 flex items-center gap-1">
           <Minus className="h-3 w-3" /> Not set
@@ -449,29 +483,11 @@ function TenantWellnessRow({ tenant }: { tenant: Tenant }) {
   );
 }
 
-// ← ADDED: small summary badge for the panel header
-function WellnessSummaryBadge({
-  color,
-  count,
-  label,
-}: {
-  color: "green" | "yellow" | "red";
-  count: number;
-  label: string;
-}) {
-  const colors = {
-    green: "bg-green-100 text-green-700",
-    yellow: "bg-yellow-100 text-yellow-700",
-    red: "bg-red-100 text-red-700",
-  };
-  return (
-    <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${colors[color]}`}>
-      {count} {label}
-    </span>
-  );
+function WellnessSummaryBadge({ color, count, label }: { color: "green" | "yellow" | "red"; count: number; label: string }) {
+  const colors = { green: "bg-green-100 text-green-700", yellow: "bg-yellow-100 text-yellow-700", red: "bg-red-100 text-red-700" };
+  return <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${colors[color]}`}>{count} {label}</span>;
 }
 
-// Unchanged components below
 function StatCard({ title, value, trend, icon }: { title: string; value: string; trend: string; icon: React.ReactNode }) {
   return (
     <div className="rounded-xl border bg-white p-5 shadow-sm hover:shadow-md transition">

@@ -1,12 +1,13 @@
 "use client";
 
 /**
- * app/admin/units/page.tsx  (UPDATED)
+ * app/admin/units/page.tsx
  *
- * Changes from original:
- * - Gets orgId from OrgContext
- * - All queries filter by orgId
- * - All new units include orgId
+ * Changes from previous:
+ * - Renamed `rent` → `rentAmount` to match payment system expectations
+ * - Added `rentDueDay` field (day of month rent is due, 1–28)
+ * - Both fields saved to Firestore and displayed in the table
+ * - Everything else identical
  */
 
 import { useEffect, useState } from "react";
@@ -18,21 +19,33 @@ import { db } from "@/lib/firebase";
 import { useOrgContext } from "../layout";
 
 interface Property { id: string; name: string; }
-interface Tenant { id: string; name: string; status: string; }
+interface Tenant   { id: string; name: string; status: string; }
 interface Unit {
-  id: string; propertyId: string; unitNumber: string;
-  rent: number; tenantId?: string | null; status: "vacant" | "occupied";
+  id: string;
+  propertyId: string;
+  unitNumber: string;
+  rentAmount: number;      // ← RENAMED from `rent`
+  rentDueDay: number;      // ← ADDED
+  tenantId?: string | null;
+  status: "vacant" | "occupied";
 }
 
 export default function AdminUnitsPage() {
   const { orgId } = useOrgContext();
-  const [units, setUnits] = useState<Unit[]>([]);
+  const [units,      setUnits]      = useState<Unit[]>([]);
   const [properties, setProperties] = useState<Property[]>([]);
-  const [tenants, setTenants] = useState<Tenant[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [showForm, setShowForm] = useState(false);
+  const [tenants,    setTenants]    = useState<Tenant[]>([]);
+  const [loading,    setLoading]    = useState(true);
+  const [showForm,   setShowForm]   = useState(false);
   const [editingUnit, setEditingUnit] = useState<Unit | null>(null);
-  const [formData, setFormData] = useState({ propertyId: "", unitNumber: "", rent: "", tenantId: "" });
+
+  const [formData, setFormData] = useState({
+    propertyId: "",
+    unitNumber: "",
+    rentAmount: "",   // ← RENAMED
+    rentDueDay: "1",  // ← ADDED: default 1st of month
+    tenantId: "",
+  });
 
   useEffect(() => {
     if (!orgId) return;
@@ -40,9 +53,9 @@ export default function AdminUnitsPage() {
       try {
         const orgFilter = where("orgId", "==", orgId);
         const [unitSnap, propertySnap, tenantSnap] = await Promise.all([
-          getDocs(query(collection(db, "units"), orgFilter)),
+          getDocs(query(collection(db, "units"),      orgFilter)),
           getDocs(query(collection(db, "properties"), orgFilter)),
-          getDocs(query(collection(db, "tenants"), orgFilter)),
+          getDocs(query(collection(db, "tenants"),    orgFilter)),
         ]);
         setUnits(unitSnap.docs.map((d) => ({ id: d.id, ...d.data() } as Unit)));
         setProperties(propertySnap.docs.map((d) => ({ id: d.id, ...d.data() } as Property)));
@@ -64,32 +77,53 @@ export default function AdminUnitsPage() {
     try {
       if (editingUnit) {
         await updateDoc(doc(db, "units", editingUnit.id), {
-          propertyId: formData.propertyId,
-          unitNumber: formData.unitNumber.trim(),
-          rent: Number(formData.rent),
-          tenantId: assignedTenant,
+          propertyId:  formData.propertyId,
+          unitNumber:  formData.unitNumber.trim(),
+          rentAmount:  Number(formData.rentAmount),   // ← RENAMED
+          rentDueDay:  Number(formData.rentDueDay),   // ← ADDED
+          tenantId:    assignedTenant,
           status,
         });
         setUnits((prev) =>
           prev.map((u) =>
             u.id === editingUnit.id
-              ? { ...u, propertyId: formData.propertyId, unitNumber: formData.unitNumber, rent: Number(formData.rent), tenantId: assignedTenant, status }
+              ? {
+                  ...u,
+                  propertyId:  formData.propertyId,
+                  unitNumber:  formData.unitNumber,
+                  rentAmount:  Number(formData.rentAmount),
+                  rentDueDay:  Number(formData.rentDueDay),
+                  tenantId:    assignedTenant,
+                  status,
+                }
               : u
           )
         );
       } else {
         const ref = await addDoc(collection(db, "units"), {
-          propertyId: formData.propertyId,
-          unitNumber: formData.unitNumber.trim(),
-          rent: Number(formData.rent),
-          tenantId: assignedTenant,
+          propertyId:  formData.propertyId,
+          unitNumber:  formData.unitNumber.trim(),
+          rentAmount:  Number(formData.rentAmount),   // ← RENAMED
+          rentDueDay:  Number(formData.rentDueDay),   // ← ADDED
+          tenantId:    assignedTenant,
           status,
-          orgId,                           // ← scoped to org
-          createdAt: serverTimestamp(),
+          orgId,
+          createdAt:   serverTimestamp(),
         });
-        setUnits((prev) => [...prev, { id: ref.id, propertyId: formData.propertyId, unitNumber: formData.unitNumber, rent: Number(formData.rent), tenantId: assignedTenant, status }]);
+        setUnits((prev) => [
+          ...prev,
+          {
+            id:          ref.id,
+            propertyId:  formData.propertyId,
+            unitNumber:  formData.unitNumber,
+            rentAmount:  Number(formData.rentAmount),
+            rentDueDay:  Number(formData.rentDueDay),
+            tenantId:    assignedTenant,
+            status,
+          },
+        ]);
       }
-      setFormData({ propertyId: "", unitNumber: "", rent: "", tenantId: "" });
+      setFormData({ propertyId: "", unitNumber: "", rentAmount: "", rentDueDay: "1", tenantId: "" });
       setEditingUnit(null);
       setShowForm(false);
     } catch (err) {
@@ -98,12 +132,19 @@ export default function AdminUnitsPage() {
     }
   };
 
-  // Tenants that are active/pending and not already assigned to a different unit
   const availableTenants = tenants.filter(
     (t) =>
       (t.status === "active" || t.status === "pending") &&
       !units.some((u) => u.tenantId === t.id && u.id !== editingUnit?.id)
   );
+
+  /* ── Ordinal suffix helper ── */
+  const ordinal = (n: number) => {
+    if (n === 1) return "1st";
+    if (n === 2) return "2nd";
+    if (n === 3) return "3rd";
+    return `${n}th`;
+  };
 
   return (
     <main className="min-h-screen bg-gray-50 p-6">
@@ -127,33 +168,47 @@ export default function AdminUnitsPage() {
             <table className="w-full text-sm">
               <thead className="bg-gray-50">
                 <tr>
-                  <th className="px-6 py-3">#</th>
-                  <th className="px-6 py-3">Property</th>
-                  <th className="px-6 py-3">Unit</th>
-                  <th className="px-6 py-3">Tenant</th>
-                  <th className="px-6 py-3">Rent</th>
-                  <th className="px-6 py-3">Status</th>
-                  <th className="px-6 py-3">Actions</th>
+                  <th className="px-6 py-3 text-left">#</th>
+                  <th className="px-6 py-3 text-left">Property</th>
+                  <th className="px-6 py-3 text-left">Unit</th>
+                  <th className="px-6 py-3 text-left">Tenant</th>
+                  <th className="px-6 py-3 text-left">Rent (KES)</th>
+                  <th className="px-6 py-3 text-left">Due Day</th>
+                  <th className="px-6 py-3 text-left">Status</th>
+                  <th className="px-6 py-3 text-left">Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {units.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="py-12 text-center text-gray-500">No units added yet.</td>
+                    <td colSpan={8} className="py-12 text-center text-gray-500">
+                      No units added yet.
+                    </td>
                   </tr>
                 ) : (
                   units.map((unit, index) => {
                     const property = properties.find((p) => p.id === unit.propertyId);
-                    const tenant = tenants.find((t) => t.id === unit.tenantId);
+                    const tenant   = tenants.find((t) => t.id === unit.tenantId);
                     return (
                       <tr key={unit.id} className="border-t hover:bg-gray-50">
                         <td className="px-6 py-3">{index + 1}</td>
                         <td className="px-6 py-3">{property?.name || "-"}</td>
                         <td className="px-6 py-3 font-medium">{unit.unitNumber}</td>
                         <td className="px-6 py-3">{tenant?.name || "Unassigned"}</td>
-                        <td className="px-6 py-3">KES {unit.rent.toLocaleString()}</td>
                         <td className="px-6 py-3">
-                          <span className={`px-3 py-1 rounded-full text-xs font-medium ${unit.status === "occupied" ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-600"}`}>
+                          {unit.rentAmount?.toLocaleString() ?? "-"}
+                        </td>
+                        <td className="px-6 py-3 text-gray-500">
+                          {unit.rentDueDay ? ordinal(unit.rentDueDay) : "-"}
+                        </td>
+                        <td className="px-6 py-3">
+                          <span
+                            className={`px-3 py-1 rounded-full text-xs font-medium ${
+                              unit.status === "occupied"
+                                ? "bg-green-100 text-green-700"
+                                : "bg-gray-100 text-gray-600"
+                            }`}
+                          >
                             {unit.status}
                           </span>
                         </td>
@@ -161,7 +216,13 @@ export default function AdminUnitsPage() {
                           <button
                             onClick={() => {
                               setEditingUnit(unit);
-                              setFormData({ propertyId: unit.propertyId, unitNumber: unit.unitNumber, rent: String(unit.rent), tenantId: unit.tenantId || "" });
+                              setFormData({
+                                propertyId:  unit.propertyId,
+                                unitNumber:  unit.unitNumber,
+                                rentAmount:  String(unit.rentAmount ?? ""),
+                                rentDueDay:  String(unit.rentDueDay ?? 1),
+                                tenantId:    unit.tenantId || "",
+                              });
                               setShowForm(true);
                             }}
                             className="text-indigo-600 hover:underline"
@@ -179,24 +240,95 @@ export default function AdminUnitsPage() {
         </div>
       </div>
 
+      {/* MODAL */}
       {showForm && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-2xl max-w-xl w-full p-8 space-y-6">
-            <h2 className="text-xl font-bold">{editingUnit ? "Edit Unit" : "Add Unit"}</h2>
+            <h2 className="text-xl font-bold">
+              {editingUnit ? "Edit Unit" : "Add Unit"}
+            </h2>
             <form onSubmit={handleSubmit} className="space-y-4">
-              <select required value={formData.propertyId} onChange={(e) => setFormData({ ...formData, propertyId: e.target.value })} className="w-full rounded-lg border px-4 py-3">
+
+              {/* Property */}
+              <select
+                required
+                value={formData.propertyId}
+                onChange={(e) => setFormData({ ...formData, propertyId: e.target.value })}
+                className="w-full rounded-lg border px-4 py-3"
+              >
                 <option value="">Select Property</option>
-                {properties.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                {properties.map((p) => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
               </select>
-              <input required placeholder="Unit Number" value={formData.unitNumber} onChange={(e) => setFormData({ ...formData, unitNumber: e.target.value })} className="w-full rounded-lg border px-4 py-3" />
-              <input required type="number" placeholder="Rent (KES)" value={formData.rent} onChange={(e) => setFormData({ ...formData, rent: e.target.value })} className="w-full rounded-lg border px-4 py-3" />
-              <select value={formData.tenantId} onChange={(e) => setFormData({ ...formData, tenantId: e.target.value })} className="w-full rounded-lg border px-4 py-3">
+
+              {/* Unit number */}
+              <input
+                required
+                placeholder="Unit Number (e.g. A1, 101)"
+                value={formData.unitNumber}
+                onChange={(e) => setFormData({ ...formData, unitNumber: e.target.value })}
+                className="w-full rounded-lg border px-4 py-3"
+              />
+
+              {/* Rent amount */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Monthly Rent (KES)
+                </label>
+                <input
+                  required
+                  type="number"
+                  min="1"
+                  placeholder="e.g. 25000"
+                  value={formData.rentAmount}
+                  onChange={(e) => setFormData({ ...formData, rentAmount: e.target.value })}
+                  className="w-full rounded-lg border px-4 py-3"
+                />
+              </div>
+
+              {/* Rent due day */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Rent Due Day (day of month)
+                </label>
+                <select
+                  required
+                  value={formData.rentDueDay}
+                  onChange={(e) => setFormData({ ...formData, rentDueDay: e.target.value })}
+                  className="w-full rounded-lg border px-4 py-3"
+                >
+                  {Array.from({ length: 28 }, (_, i) => i + 1).map((d) => (
+                    <option key={d} value={d}>
+                      {ordinal(d)} of every month
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Assign tenant */}
+              <select
+                value={formData.tenantId}
+                onChange={(e) => setFormData({ ...formData, tenantId: e.target.value })}
+                className="w-full rounded-lg border px-4 py-3"
+              >
                 <option value="">Unassigned</option>
-                {availableTenants.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+                {availableTenants.map((t) => (
+                  <option key={t.id} value={t.id}>{t.name}</option>
+                ))}
               </select>
+
               <div className="flex justify-end gap-4 pt-4">
-                <button type="button" onClick={() => setShowForm(false)} className="border px-6 py-3 rounded-lg">Cancel</button>
-                <button type="submit" className="bg-indigo-600 text-white px-6 py-3 rounded-lg">Save Unit</button>
+                <button
+                  type="button"
+                  onClick={() => { setShowForm(false); setEditingUnit(null); }}
+                  className="border px-6 py-3 rounded-lg"
+                >
+                  Cancel
+                </button>
+                <button type="submit" className="bg-indigo-600 text-white px-6 py-3 rounded-lg">
+                  Save Unit
+                </button>
               </div>
             </form>
           </div>
