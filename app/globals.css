@@ -51,12 +51,22 @@ body {
   min-height: 100vh;
 }
 
-/* Force html/body dark ONLY when the homepage wrapper is present */
-:has(.hfy-dark-page) html,
-:has(.hfy-dark-page) body {
+/* Force the wrapper to cover the full viewport including any body gaps */
+.hfy-dark-page {
   background-color: var(--ink);
+  color: var(--text);
+  min-height: 100vh;
+  /* Ensure it covers any body/html background showing through */
+  position: relative;
+  isolation: isolate;
 }
-
+/* Neutral body — no color set, so each page controls its own bg */
+body {
+  font-family: 'DM Sans', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  min-height: 100vh;
+  background-color: transparent; /* ← ADD THIS */
+}
 /* ── Homepage component classes ─────────────── */
 
 .display {

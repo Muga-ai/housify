@@ -34,7 +34,7 @@ export default function Home() {
   // ─── All styles are now in globals.css — NO <style> tag needed here ───
 
   return (
-    <div className="hfy-dark-page">
+   <div className="hfy-dark-page" style={{ minHeight: "100vh", width: "100%" }}>
     
       {/* ── NAV ── */}
       <nav className={`nav ${scrolled ? "scrolled" : ""}`}>
