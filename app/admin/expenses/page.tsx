@@ -153,26 +153,42 @@ export default function AdminExpensesPage() {
 
   /* ── Fetch ── */
   useEffect(() => {
-    if (!orgId) return;
-    const fetchAll = async () => {
+  if (!orgId) return;
+  const fetchAll = async () => {
+    try {
+      const orgFilter = where("orgId", "==", orgId);
+
+      // ← Split into separate try/catches so a failing expenses query
+      //   doesn't also wipe out properties and units
+      const [propSnap, unitSnap] = await Promise.all([
+        getDocs(query(collection(db, "properties"), orgFilter)),
+        getDocs(query(collection(db, "units"),      orgFilter)),
+      ]);
+      setProperties(propSnap.docs.map((d) => ({ id: d.id, ...d.data() } as Property)));
+      setUnits(unitSnap.docs.map((d) => ({ id: d.id, ...d.data() } as Unit)));
+
+      // Fetch expenses separately — orderBy("createdAt") needs a composite
+      // index in Firestore. If it fails, properties still load fine.
       try {
-        const orgFilter = where("orgId", "==", orgId);
-        const [expSnap, propSnap, unitSnap] = await Promise.all([
-          getDocs(query(collection(db, "expenses"), orgFilter, orderBy("createdAt", "desc"))),
-          getDocs(query(collection(db, "properties"), orgFilter)),
-          getDocs(query(collection(db, "units"), orgFilter)),
-        ]);
+        const expSnap = await getDocs(
+          query(collection(db, "expenses"), orgFilter, orderBy("createdAt", "desc"))
+        );
         setExpenses(expSnap.docs.map((d) => ({ id: d.id, ...d.data() } as Expense)));
-        setProperties(propSnap.docs.map((d) => ({ id: d.id, ...d.data() } as Property)));
-        setUnits(unitSnap.docs.map((d) => ({ id: d.id, ...d.data() } as Unit)));
-      } catch (err) {
-        console.error("Expenses load error:", err);
-      } finally {
-        setLoading(false);
+      } catch (expErr: any) {
+        console.error("Expenses query failed (check Firestore composite index):", expErr?.message);
+        // Fall back — fetch without ordering so the modal still works
+        const expSnap = await getDocs(query(collection(db, "expenses"), orgFilter));
+        setExpenses(expSnap.docs.map((d) => ({ id: d.id, ...d.data() } as Expense)));
       }
-    };
-    fetchAll();
-  }, [orgId]);
+
+    } catch (err) {
+      console.error("Properties/units load error:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+  fetchAll();
+}, [orgId]);
 
   /* ── Save (add / edit) ── */
   const handleSave = async (e: React.FormEvent) => {
