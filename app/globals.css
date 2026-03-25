@@ -2,4 +2,325 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Optional: custom utility overrides or component styles can go here */
+/* ─────────────────────────────────────────────
+   HOUSIFY KE — Global Styles
+   Force dark theme regardless of OS preference.
+   All CSS variables live here so they're always
+   available before any component renders.
+───────────────────────────────────────────── */
+
+/* 1. Import fonts at the global level */
+@import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700;800;900&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;1,9..40,300&display=swap');
+
+/* 2. CSS variables on :root — always dark, always available */
+:root {
+  --ink:    #0b0f1a;
+  --ink2:   #111827;
+  --slate:  #1e2535;
+  --amber:  #f59e0b;
+  --amber2: #fbbf24;
+  --gold:   #d97706;
+  --muted:  #6b7280;
+  --border: rgba(255, 255, 255, 0.07);
+  --text:   #e5e7eb;
+  --text2:  #9ca3af;
+}
+
+/* 3. Force dark background on html AND body so the OS light-mode
+      preference can never bleed through */
+html {
+  background-color: #0b0f1a !important;
+  color-scheme: dark;           /* tells the browser: treat this as dark */
+}
+
+body {
+  background-color: var(--ink) !important;
+  color: var(--text) !important;
+  font-family: 'DM Sans', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  min-height: 100vh;
+}
+
+/* 4. Box-sizing reset (Tailwind preflight covers most of this,
+      but explicit is better than implicit) */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+/* 5. Display / heading font helper — used by .display className */
+.display {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  line-height: 0.95;
+  text-transform: uppercase;
+}
+
+/* 6. Grid-texture background helper */
+.grid-bg {
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+  background-size: 60px 60px;
+}
+
+/* 7. Amber radial glow blob */
+.glow-amber {
+  position: absolute;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(245, 158, 11, 0.15) 0%, transparent 70%);
+  pointer-events: none;
+}
+
+/* 8. Fade-up scroll animation */
+.fade-up {
+  opacity: 0;
+  transform: translateY(28px);
+  transition: opacity 0.6s ease, transform 0.6s ease;
+}
+.fade-up.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+.fade-up.d1 { transition-delay: 0.05s; }
+.fade-up.d2 { transition-delay: 0.15s; }
+.fade-up.d3 { transition-delay: 0.25s; }
+.fade-up.d4 { transition-delay: 0.35s; }
+.fade-up.d5 { transition-delay: 0.45s; }
+.fade-up.d6 { transition-delay: 0.55s; }
+
+/* 9. Amber underline accent */
+.accent-line::after {
+  content: '';
+  display: block;
+  width: 48px;
+  height: 3px;
+  background: var(--amber);
+  margin-top: 14px;
+}
+
+/* 10. Pill badge */
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(245, 158, 11, 0.12);
+  border: 1px solid rgba(245, 158, 11, 0.25);
+  color: var(--amber2);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 5px 12px;
+  border-radius: 100px;
+}
+
+/* 11. Card */
+.card {
+  background: var(--slate);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  transition: border-color 0.2s, transform 0.2s;
+}
+.card:hover {
+  border-color: rgba(245, 158, 11, 0.3);
+  transform: translateY(-2px);
+}
+
+/* 12. Stat card */
+.stat-card {
+  background: linear-gradient(135deg, #1e2535 0%, #161d2e 100%);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 28px;
+  position: relative;
+  overflow: hidden;
+}
+.stat-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, var(--amber), transparent);
+}
+
+/* 13. Primary button */
+.btn-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--amber);
+  color: #000 !important;       /* force black text — never inherit white */
+  font-weight: 700;
+  font-size: 14px;
+  padding: 14px 28px;
+  border-radius: 10px;
+  border: none;
+  cursor: pointer;
+  transition: background 0.2s, transform 0.15s, box-shadow 0.2s;
+  text-decoration: none;
+  letter-spacing: 0.01em;
+}
+.btn-primary:hover {
+  background: var(--amber2);
+  transform: translateY(-1px);
+  box-shadow: 0 8px 24px rgba(245, 158, 11, 0.35);
+}
+
+/* 14. Ghost button */
+.btn-ghost {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: transparent;
+  color: var(--text) !important;
+  font-weight: 500;
+  font-size: 14px;
+  padding: 13px 24px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  cursor: pointer;
+  transition: border-color 0.2s, background 0.2s;
+  text-decoration: none;
+}
+.btn-ghost:hover {
+  border-color: rgba(255, 255, 255, 0.35);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+/* 15. Fixed navbar */
+.nav {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 100;
+  transition: background 0.3s, backdrop-filter 0.3s, border-color 0.3s;
+}
+.nav.scrolled {
+  background: rgba(11, 15, 26, 0.9);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--border);
+}
+
+/* 16. Feature icon chip */
+.feat-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  background: rgba(245, 158, 11, 0.12);
+  border: 1px solid rgba(245, 158, 11, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--amber);
+  flex-shrink: 0;
+}
+
+/* 17. Step number circle */
+.step-num {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 2px solid var(--amber);
+  color: var(--amber);
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 800;
+  font-size: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+/* 18. Pricing card */
+.price-card {
+  border-radius: 20px;
+  padding: 32px;
+  border: 1px solid var(--border);
+  background: var(--slate);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  transition: transform 0.2s, border-color 0.2s;
+}
+.price-card:hover {
+  transform: translateY(-3px);
+}
+.price-card.featured {
+  border-color: var(--amber);
+  background: linear-gradient(145deg, #1e2535, #1a2030);
+  position: relative;
+}
+.price-card.featured::before {
+  content: 'MOST POPULAR';
+  position: absolute;
+  top: -12px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--amber);
+  color: #000;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 700;
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  padding: 4px 14px;
+  border-radius: 100px;
+}
+
+/* 19. Footer link */
+.footer-link {
+  color: var(--text2);
+  text-decoration: none;
+  font-size: 14px;
+  transition: color 0.15s;
+}
+.footer-link:hover {
+  color: var(--amber2);
+}
+
+/* 20. Divider */
+.divider {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 0;
+}
+
+/* 21. Testimonial card */
+.testimonial {
+  background: var(--slate);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 28px;
+}
+
+/* 22. Mobile nav overlay */
+.mobile-nav {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: var(--ink2);
+  z-index: 200;
+  flex-direction: column;
+  padding: 24px;
+  gap: 12px;
+}
+.mobile-nav.open {
+  display: flex;
+}
+
+/* 23. Responsive breakpoints */
+@media (max-width: 768px) {
+  .hide-mobile        { display: none !important; }
+  .hero-grid          { grid-template-columns: 1fr !important; }
+  .stats-grid         { grid-template-columns: 1fr 1fr !important; }
+  .features-grid      { grid-template-columns: 1fr !important; }
+  .pricing-grid       { grid-template-columns: 1fr !important; }
+  .footer-grid        { grid-template-columns: 1fr 1fr !important; }
+  .footer-brand       { grid-column: 1 / -1 !important; }
+  .steps-grid         { grid-template-columns: 1fr !important; }
+}
