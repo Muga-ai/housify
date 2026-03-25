@@ -3,9 +3,8 @@
 /**
  * app/admin/layout.tsx
  *
- * Fix: OrgContext and useOrgContext moved to lib/org-context.ts
- * This file now only exports `default` which Next.js 16 requires.
- * All child pages import useOrgContext from "@/lib/org-context" instead.
+ * Updated: Added Expenses and Reports to the nav items.
+ * Everything else identical to previous version.
  */
 
 import { useEffect, useState } from "react";
@@ -13,20 +12,23 @@ import { useRouter, usePathname } from "next/navigation";
 import { signOut } from "firebase/auth";
 import { auth } from "@/lib/firebase";
 import { useOrg, Org } from "@/lib/org";
-import { OrgContext } from "@/lib/org-context";  // ← MOVED HERE
+import { OrgContext } from "@/lib/org-context";
 import Link from "next/link";
 import {
   Building2, Users, Home, LogOut, Wrench,
   Menu, X, Loader2, AlertTriangle, Receipt,
+  TrendingDown, BarChart3,
 } from "lucide-react";
 
 const NAV_ITEMS = [
-  { title: "Dashboard",   href: "/admin/dashboard",   icon: <Home      className="h-5 w-5" /> },
-  { title: "Properties",  href: "/admin/properties",  icon: <Building2 className="h-5 w-5" /> },
-  { title: "Units",       href: "/admin/units",       icon: <Building2 className="h-5 w-5" /> },
-  { title: "Tenants",     href: "/admin/tenants",     icon: <Users     className="h-5 w-5" /> },
-  { title: "Maintenance", href: "/admin/maintenance", icon: <Wrench    className="h-5 w-5" /> },
-  { title: "Payments",    href: "/admin/payments",    icon: <Receipt   className="h-5 w-5" /> },
+  { title: "Dashboard",   href: "/admin/dashboard",   icon: <Home        className="h-5 w-5" /> },
+  { title: "Properties",  href: "/admin/properties",  icon: <Building2   className="h-5 w-5" /> },
+  { title: "Units",       href: "/admin/units",       icon: <Building2   className="h-5 w-5" /> },
+  { title: "Tenants",     href: "/admin/tenants",     icon: <Users       className="h-5 w-5" /> },
+  { title: "Maintenance", href: "/admin/maintenance", icon: <Wrench      className="h-5 w-5" /> },
+  { title: "Payments",    href: "/admin/payments",    icon: <Receipt     className="h-5 w-5" /> },
+  { title: "Expenses",    href: "/admin/expenses",    icon: <TrendingDown className="h-5 w-5" /> },  // ← NEW
+  { title: "Reports",     href: "/admin/reports",     icon: <BarChart3   className="h-5 w-5" /> },  // ← NEW
 ];
 
 const PLAN_BADGE: Record<string, string> = {
@@ -137,7 +139,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             </div>
           </div>
 
-          <nav className="mt-4 flex-1">
+          <nav className="mt-4 flex-1 overflow-y-auto">
             {NAV_ITEMS.map((item) => {
               const active = pathname === item.href;
               return (
