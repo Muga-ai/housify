@@ -113,7 +113,7 @@ export default function Home() {
                   Built for Kenyan Property Managers
                 </div>
 
-                <h1 className="display" style={{ fontSize: "clamp(52px, 7vw, 88px)", color: "#fff", marginBottom: 24 }}>
+                <h1 className="display" style={{ fontSize: "clamp(32px, 4vw, 52px)", color: "#fff", marginBottom: 24 }}>
                   Manage Every<br />
                   <span style={{ color: "var(--amber)" }}>Property.</span><br />
                   Every Tenant.<br />
@@ -225,7 +225,7 @@ export default function Home() {
               ].map((s, i) => (
                 <div key={i} className={`stat-card fade-up d${i + 1} ${statsInView ? "visible" : ""}`}>
                   <div style={{ color: "var(--amber)", marginBottom: 12 }}>{s.icon}</div>
-                  <div className="display" style={{ fontSize: 44, color: "#fff" }}>
+                  <div className="display" style={{ fontSize: 34, color: "#fff" }}>
                     {s.count.toLocaleString()}{s.suffix}
                   </div>
                   <div style={{ fontSize: 13, color: "var(--text2)", marginTop: 4, fontWeight: 500 }}>{s.label}</div>
@@ -242,7 +242,7 @@ export default function Home() {
               <div className={`pill fade-up ${featuresInView ? "visible" : ""}`} style={{ marginBottom: 16 }}>
                 Platform Features
               </div>
-              <h2 className={`display accent-line fade-up d1 ${featuresInView ? "visible" : ""}`} style={{ fontSize: "clamp(36px, 5vw, 56px)", color: "#fff" }}>
+              <h2 className={`display accent-line fade-up d1 ${featuresInView ? "visible" : ""}`} style={{ fontSize: "clamp(28px, 3.5vw, 42px)", color: "#fff" }}>
                 Everything a Kenyan<br />Landlord Needs
               </h2>
             </div>
@@ -274,7 +274,7 @@ export default function Home() {
           <div ref={howRef} style={{ maxWidth: 1200, margin: "0 auto" }}>
             <div style={{ marginBottom: 60 }}>
               <div className={`pill fade-up ${howInView ? "visible" : ""}`} style={{ marginBottom: 16 }}>Getting Started</div>
-              <h2 className={`display fade-up d1 ${howInView ? "visible" : ""}`} style={{ fontSize: "clamp(36px, 5vw, 56px)", color: "#fff" }}>
+              <h2 className={`display fade-up d1 ${howInView ? "visible" : ""}`} style={{ fontSize: "clamp(28px, 3.5vw, 42px)", color: "#fff" }}>
                 Up and Running<br />in 15 Minutes
               </h2>
             </div>
@@ -304,7 +304,7 @@ export default function Home() {
           <div style={{ maxWidth: 1200, margin: "0 auto" }}>
             <div style={{ textAlign: "center", marginBottom: 60 }}>
               <div className="pill" style={{ marginBottom: 16 }}>Transparent Pricing</div>
-              <h2 className="display" style={{ fontSize: "clamp(36px, 5vw, 56px)", color: "#fff" }}>
+              <h2 className="display" style={{ fontSize: "clamp(28px, 3.5vw, 42px)", color: "#fff" }}>
                 Plans for Every<br />Portfolio Size
               </h2>
               <p style={{ fontSize: 15, color: "var(--text2)", marginTop: 16, fontWeight: 300 }}>
@@ -363,7 +363,7 @@ export default function Home() {
           <div ref={testimonialsRef} style={{ maxWidth: 1200, margin: "0 auto" }}>
             <div style={{ marginBottom: 56 }}>
               <div className={`pill fade-up ${testimonialsInView ? "visible" : ""}`} style={{ marginBottom: 16 }}>From Our Users</div>
-              <h2 className={`display fade-up d1 ${testimonialsInView ? "visible" : ""}`} style={{ fontSize: "clamp(32px, 4vw, 48px)", color: "#fff" }}>
+              <h2 className={`display fade-up d1 ${testimonialsInView ? "visible" : ""}`} style={{ fontSize: "clamp(24px, 3vw, 36px)", color: "#fff" }}>
                 Landlords Love Housify
               </h2>
             </div>
@@ -401,7 +401,7 @@ export default function Home() {
           <div className="glow-amber" style={{ width: 500, height: 500, top: "50%", left: "50%", transform: "translate(-50%,-50%)" }} />
           <div style={{ maxWidth: 640, margin: "0 auto", position: "relative" }}>
             <div className="pill" style={{ marginBottom: 24, justifyContent: "center" }}>Start Today</div>
-            <h2 className="display" style={{ fontSize: "clamp(40px, 6vw, 72px)", color: "#fff", marginBottom: 20 }}>
+            <h2 className="display" style={{ fontSize: "clamp(30px, 4vw, 52px)", color: "#fff", marginBottom: 20 }}>
               Your Properties.<br />
               <span style={{ color: "var(--amber)" }}>Under Control.</span>
             </h2>
