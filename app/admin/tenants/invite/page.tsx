@@ -1,11 +1,15 @@
 "use client";
 
 import { useState } from "react";
-import { addDoc, collection, query, where, getDocs, serverTimestamp } from "firebase/firestore";
+import {
+  addDoc, collection, query, where, getDocs, serverTimestamp
+} from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { createTenantInvite } from "@/lib/invite";
-import { useOrgContext } from "@/lib/org-context"; // ← FIXED: was `import useOrgContext from "../../layout"`
-import { ClipboardCopy, Loader2 } from "lucide-react";
+import { useOrgContext } from "@/lib/org-context";
+import {
+  ClipboardCopy, Loader2, CheckCircle, MessageCircle
+} from "lucide-react";
 
 export default function AdminTenantInvitePage() {
   const { orgId } = useOrgContext();
@@ -15,7 +19,16 @@ export default function AdminTenantInvitePage() {
   const [inviteLink, setInviteLink] = useState("");
   const [loading,    setLoading]    = useState(false);
   const [error,      setError]      = useState("");
+  const [copied,     setCopied]     = useState(false);
+  const [toast,      setToast]      = useState<string | null>(null);
 
+  /* ── TOAST ── */
+  const showToast = (message: string) => {
+    setToast(message);
+    setTimeout(() => setToast(null), 2500);
+  };
+
+  /* ── CREATE INVITE ── */
   const handleCreateInvite = async () => {
     setError("");
 
@@ -33,7 +46,6 @@ export default function AdminTenantInvitePage() {
     setLoading(true);
 
     try {
-      // Check for duplicate within THIS org only
       const q = query(
         collection(db, "tenants"),
         where("email", "==", email),
@@ -47,7 +59,6 @@ export default function AdminTenantInvitePage() {
         return;
       }
 
-      // Create tenant record (pending, no unit yet)
       const tenantRef = await addDoc(collection(db, "tenants"), {
         name:       name.trim(),
         email:      email.trim(),
@@ -58,9 +69,10 @@ export default function AdminTenantInvitePage() {
         createdAt:  serverTimestamp(),
       });
 
-      // Create invite token
       const code = await createTenantInvite(tenantRef.id, email, orgId);
+
       setInviteLink(`${window.location.origin}/signup/${code}`);
+      setCopied(false);
 
     } catch {
       setError("Failed to create invite.");
@@ -69,17 +81,41 @@ export default function AdminTenantInvitePage() {
     }
   };
 
-  const handleCopyLink = () => {
-    if (inviteLink) navigator.clipboard.writeText(inviteLink);
+  /* ── COPY ── */
+  const handleCopyLink = async () => {
+    if (!inviteLink) return;
+
+    try {
+      await navigator.clipboard.writeText(inviteLink);
+      setCopied(true);
+      showToast("Link copied. Share with your tenant");
+
+      setTimeout(() => setCopied(false), 2500);
+    } catch {
+      prompt("Copy this link:", inviteLink);
+    }
   };
 
+  /* ── WHATSAPP ── */
+  const handleWhatsAppShare = () => {
+    if (!inviteLink) return;
+
+    const message = encodeURIComponent(
+      `Hi${name ? ` ${name}` : ""},\n\n` +
+      `You’ve been invited to join Housify.\n\n` +
+      `Create your account here:\n${inviteLink}`
+    );
+
+    window.open(`https://wa.me/?text=${message}`, "_blank");
+  };
+
+  /* ── UI ── */
   return (
     <main className="p-8 max-w-xl mx-auto space-y-6">
       <h1 className="text-2xl font-bold">Invite Tenant</h1>
 
       <p className="text-sm text-gray-600">
-        An invite link will be generated. Share it with your tenant so they can
-        create their own login and access their unit dashboard.
+        Generate an invite link and share it with your tenant via WhatsApp or copy link.
       </p>
 
       {error && (
@@ -113,18 +149,56 @@ export default function AdminTenantInvitePage() {
       </button>
 
       {inviteLink && (
-        <div className="bg-green-50 border border-green-200 p-4 rounded space-y-2">
-          <p className="font-medium text-green-800">Invite Link Ready</p>
-          <p className="text-xs text-green-700">This link expires in 7 days.</p>
+        <div className="bg-green-50 border border-green-200 p-4 rounded space-y-3">
+          <p className="font-medium text-green-800 flex items-center gap-2">
+            <CheckCircle className="h-4 w-4" />
+            Invite Link Ready
+          </p>
+
+          <p className="text-xs text-green-700">
+            This link expires in 7 days.
+          </p>
+
           <div className="flex items-center justify-between gap-2">
             <p className="text-sm break-all text-gray-700">{inviteLink}</p>
+
             <button
               onClick={handleCopyLink}
-              className="border px-3 py-1 rounded hover:bg-green-100 flex items-center gap-1 text-green-700 shrink-0"
+              className={`border px-3 py-1 rounded flex items-center gap-1 shrink-0 transition ${
+                copied
+                  ? "bg-green-600 text-white border-green-600"
+                  : "hover:bg-green-100 text-green-700"
+              }`}
             >
-              <ClipboardCopy className="h-4 w-4" /> Copy
+              {copied ? (
+                <>
+                  <CheckCircle className="h-4 w-4" /> Copied
+                </>
+              ) : (
+                <>
+                  <ClipboardCopy className="h-4 w-4" /> Copy
+                </>
+              )}
             </button>
           </div>
+
+          {/* ACTION BUTTONS */}
+          <div className="flex gap-2 pt-2">
+            <button
+              onClick={handleWhatsAppShare}
+              className="flex-1 flex items-center justify-center gap-2 bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 text-sm font-medium"
+            >
+              <MessageCircle className="h-4 w-4" />
+              Share via WhatsApp
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* TOAST */}
+      {toast && (
+        <div className="fixed bottom-6 right-6 bg-black text-white text-sm px-4 py-2 rounded-lg shadow-lg">
+          {toast}
         </div>
       )}
     </main>

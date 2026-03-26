@@ -3,17 +3,18 @@
 /**
  * app/admin/invoice/[tenantId]/[month]/page.tsx
  *
- * Printable / saveable invoice for a specific tenant and month.
- * Open from payments page: /admin/invoice/TENANT_ID/2026-03
- * Click Print / Save as PDF in the browser.
- *
- * The page loads standalone (no admin sidebar) so it prints cleanly.
- * Data is fetched from Firestore on the client — no auth bypass needed
- * because the admin is already signed in when they open the tab.
+ * FIXES:
+ * 1. Added onAuthStateChanged guard — when this page opens in a new tab,
+ *    Firebase Auth hasn't rehydrated yet, so Firestore calls fire before the
+ *    token is attached → "Missing or insufficient permissions". We now wait
+ *    for auth to confirm the user before fetching anything.
+ * 2. fetchData moved into the auth-ready effect so it always runs with a
+ *    valid token.
  */
 
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
+import { onAuthStateChanged, User } from "firebase/auth";
 import {
   collection,
   getDocs,
@@ -22,8 +23,7 @@ import {
   where,
   doc,
 } from "firebase/firestore";
-import { db } from "@/lib/firebase";
-import { auth } from "@/lib/firebase";
+import { db, auth } from "@/lib/firebase";
 import { Loader2, Printer, Building2, CheckCircle, Clock, XCircle } from "lucide-react";
 
 /* ─── Types ─────────────────────────────────────────── */
@@ -118,6 +118,10 @@ export default function InvoicePage() {
   const tenantId = params?.tenantId as string;
   const month    = params?.month    as string;
 
+  // ── Auth guard ───────────────────────────────────────────────────────────
+  const [authReady, setAuthReady] = useState(false);
+
+  // ── Data state ───────────────────────────────────────────────────────────
   const [loading,  setLoading]  = useState(true);
   const [error,    setError]    = useState("");
 
@@ -127,7 +131,23 @@ export default function InvoicePage() {
   const [property, setProperty] = useState<Property | null>(null);
   const [org,      setOrg]      = useState<Org      | null>(null);
 
+  // ── Step 1: wait for Firebase Auth session to rehydrate ──────────────────
   useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (user: User | null) => {
+      if (user) {
+        setAuthReady(true);
+      } else {
+        setError("You must be signed in as an admin to view this invoice.");
+        setLoading(false);
+      }
+    });
+    return unsubscribe;
+  }, []);
+
+  // ── Step 2: fetch only after auth is confirmed ───────────────────────────
+  useEffect(() => {
+    if (!authReady) return;
+
     if (!tenantId || !month) {
       setError("Invalid invoice URL.");
       setLoading(false);
@@ -138,7 +158,7 @@ export default function InvoicePage() {
       try {
         // 1. Tenant
         const tenantSnap = await getDoc(doc(db, "tenants", tenantId));
-        if (!tenantSnap.exists()) { setError("Tenant not found."); return; }
+        if (!tenantSnap.exists()) { setError("Tenant not found."); setLoading(false); return; }
         const t = { id: tenantSnap.id, ...tenantSnap.data() } as Tenant;
         setTenant(t);
 
@@ -150,7 +170,9 @@ export default function InvoicePage() {
             where("month",    "==", month)
           )
         );
-        const pay = paySnap.empty ? null : { id: paySnap.docs[0].id, ...paySnap.docs[0].data() } as Payment;
+        const pay = paySnap.empty
+          ? null
+          : { id: paySnap.docs[0].id, ...paySnap.docs[0].data() } as Payment;
         setPayment(pay);
 
         // 3. Unit
@@ -170,16 +192,22 @@ export default function InvoicePage() {
           const orgSnap = await getDoc(doc(db, "orgs", t.orgId));
           if (orgSnap.exists()) setOrg(orgSnap.data() as Org);
         }
-      } catch (err) {
+      } catch (err: any) {
         console.error(err);
-        setError("Failed to load invoice data.");
+        setError(
+          err?.code === "permission-denied"
+            ? "Permission denied. Make sure you are signed in as an admin."
+            : "Failed to load invoice data."
+        );
       } finally {
         setLoading(false);
       }
     };
 
     fetchData();
-  }, [tenantId, month]);
+  }, [authReady, tenantId, month]);
+
+  /* ── Loading / error states ─────────────────────────────────────────────── */
 
   if (loading) {
     return (
@@ -200,17 +228,21 @@ export default function InvoicePage() {
     );
   }
 
+  /* ── Derived values ─────────────────────────────────────────────────────── */
+
   const rentAmount  = unit?.rentAmount  ?? payment?.amount ?? 0;
   const amountPaid  = payment?.amount   ?? 0;
   const balance     = rentAmount - amountPaid;
   const invNum      = invoiceNumber(tenantId, month);
 
   const statusConfig = {
-    verified: { label: "PAID",    cls: "bg-green-100 text-green-700 border-green-200",  icon: <CheckCircle className="h-5 w-5" /> },
-    pending:  { label: "PENDING", cls: "bg-yellow-100 text-yellow-700 border-yellow-200", icon: <Clock className="h-5 w-5" /> },
-    rejected: { label: "REJECTED",cls: "bg-red-100 text-red-700 border-red-200",        icon: <XCircle className="h-5 w-5" /> },
+    verified: { label: "PAID",     cls: "bg-green-100 text-green-700 border-green-200",   icon: <CheckCircle className="h-5 w-5" /> },
+    pending:  { label: "PENDING",  cls: "bg-yellow-100 text-yellow-700 border-yellow-200", icon: <Clock       className="h-5 w-5" /> },
+    rejected: { label: "REJECTED", cls: "bg-red-100 text-red-700 border-red-200",          icon: <XCircle     className="h-5 w-5" /> },
   };
   const statusInfo = payment ? statusConfig[payment.status] : null;
+
+  /* ── Render ─────────────────────────────────────────────────────────────── */
 
   return (
     <>
@@ -240,7 +272,7 @@ export default function InvoicePage() {
         </button>
       </div>
 
-      {/* Invoice — this is what prints */}
+      {/* Invoice */}
       <main className="min-h-screen bg-gray-100 p-8 print:bg-white print:p-0">
         <div className="max-w-2xl mx-auto bg-white shadow-lg rounded-2xl overflow-hidden print:shadow-none print:rounded-none">
 
@@ -268,7 +300,11 @@ export default function InvoicePage() {
                 <p className="text-xs text-gray-400 uppercase tracking-wide font-medium mb-1">Billed To</p>
                 <p className="font-semibold text-gray-900 text-base">{tenant?.name}</p>
                 <p className="text-sm text-gray-500">{tenant?.email}</p>
-                {property && <p className="text-sm text-gray-500">{property.name}{property.location ? `, ${property.location}` : ""}</p>}
+                {property && (
+                  <p className="text-sm text-gray-500">
+                    {property.name}{property.location ? `, ${property.location}` : ""}
+                  </p>
+                )}
                 {unit && <p className="text-sm text-gray-500">Unit {unit.unitNumber}</p>}
               </div>
               <div className="text-right">
@@ -282,7 +318,8 @@ export default function InvoicePage() {
                   </p>
                 )}
                 <p className="text-sm text-gray-700">
-                  <span className="font-medium">Date:</span> {new Date().toLocaleDateString("en-KE", { day: "numeric", month: "short", year: "numeric" })}
+                  <span className="font-medium">Date:</span>{" "}
+                  {new Date().toLocaleDateString("en-KE", { day: "numeric", month: "short", year: "numeric" })}
                 </p>
               </div>
             </div>
@@ -319,7 +356,7 @@ export default function InvoicePage() {
               </table>
             </div>
 
-            {/* Payment details (if payment exists) */}
+            {/* Payment details */}
             {payment && (
               <div className="border rounded-xl p-4 space-y-2">
                 <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Payment Details</p>
@@ -357,15 +394,21 @@ export default function InvoicePage() {
             )}
 
             {/* Balance */}
-            <div className={`rounded-xl p-4 flex items-center justify-between ${payment?.status === "verified" ? "bg-green-50 border border-green-200" : "bg-gray-50 border"}`}>
+            <div className={`rounded-xl p-4 flex items-center justify-between ${
+              payment?.status === "verified" ? "bg-green-50 border border-green-200" : "bg-gray-50 border"
+            }`}>
               <div>
                 <p className="text-sm font-semibold text-gray-700">Balance</p>
                 <p className="text-xs text-gray-500 mt-0.5">
-                  {payment?.status === "verified" ? "Payment verified — balance cleared" : "Pending landlord verification"}
+                  {payment?.status === "verified"
+                    ? "Payment verified — balance cleared"
+                    : "Pending landlord verification"}
                 </p>
               </div>
               <div className="text-right">
-                <p className={`text-2xl font-bold ${balance <= 0 && payment?.status === "verified" ? "text-green-700" : "text-gray-900"}`}>
+                <p className={`text-2xl font-bold ${
+                  balance <= 0 && payment?.status === "verified" ? "text-green-700" : "text-gray-900"
+                }`}>
                   KES {fmt(Math.abs(balance))}
                 </p>
                 {balance <= 0 && payment?.status === "verified" && (

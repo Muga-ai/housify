@@ -3,13 +3,15 @@
 /**
  * app/tenant/dashboard/page.tsx
  *
- * Critical fix: fetch tenant record by uid not email.
- * The tenant document gets uid stamped during invite signup.
- * Fetching by email works only if email matches exactly —
- * fetching by uid is reliable and matches the Firestore rules.
+ * FIXES:
+ * 1. Replaced `auth.currentUser` (null on refresh) with `onAuthStateChanged`
+ *    so the dashboard waits for Firebase to restore the session before fetching.
+ * 2. `fetchTenantData` now receives the user object explicitly — no closure race.
+ * 3. `setLoading(false)` is now always reached (was skipped when user was null).
  */
 
 import { useEffect, useState } from "react";
+import { onAuthStateChanged, User } from "firebase/auth";
 import { auth, db } from "@/lib/firebase";
 import {
   collection, query, where, getDocs,
@@ -37,9 +39,11 @@ interface Unit {
 }
 
 export default function TenantDashboard() {
-  const user = auth.currentUser;
-  const displayName = user?.displayName || user?.email?.split("@")[0] || "Tenant";
+  // ── Auth state ──────────────────────────────────────────────────────────
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [authChecked, setAuthChecked] = useState(false);
 
+  // ── Data state ──────────────────────────────────────────────────────────
   const [tenant,           setTenant]           = useState<Tenant | null>(null);
   const [property,         setProperty]         = useState<Property | null>(null);
   const [unit,             setUnit]             = useState<Unit | null>(null);
@@ -47,62 +51,84 @@ export default function TenantDashboard() {
   const [openRequests,     setOpenRequests]     = useState(0);
   const [updatingWellness, setUpdatingWellness] = useState(false);
 
+  // ── Step 1: wait for Firebase Auth to rehydrate ─────────────────────────
   useEffect(() => {
-    const fetchTenantData = async () => {
-      if (!user) return;
-      try {
-        // ← FIXED: fetch by uid first (most reliable after invite signup)
-        //   Fall back to email for manually added tenants
-        let tenantDoc: Tenant | null = null;
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      setCurrentUser(user);
+      setAuthChecked(true);
+    });
+    return unsubscribe;
+  }, []);
 
-        const byUid = await getDocs(
-          query(collection(db, "tenants"), where("uid", "==", user.uid))
+  // ── Step 2: once auth is known, fetch tenant data ───────────────────────
+  useEffect(() => {
+    if (!authChecked) return;
+
+    if (!currentUser) {
+      // Not signed in — stop spinner; layout will handle redirect
+      setLoading(false);
+      return;
+    }
+
+    fetchTenantData(currentUser);
+  }, [authChecked, currentUser]);
+
+  // ── Fetch ────────────────────────────────────────────────────────────────
+  const fetchTenantData = async (user: User) => {
+    setLoading(true);
+    try {
+      // Prefer uid lookup (reliable after invite signup), fall back to email
+      let tenantDoc: Tenant | null = null;
+
+      const byUid = await getDocs(
+        query(collection(db, "tenants"), where("uid", "==", user.uid))
+      );
+      if (!byUid.empty) {
+        tenantDoc = { id: byUid.docs[0].id, ...byUid.docs[0].data() } as Tenant;
+      } else {
+        const byEmail = await getDocs(
+          query(collection(db, "tenants"), where("email", "==", user.email))
         );
-        if (!byUid.empty) {
-          tenantDoc = { id: byUid.docs[0].id, ...byUid.docs[0].data() } as Tenant;
-        } else {
-          const byEmail = await getDocs(
-            query(collection(db, "tenants"), where("email", "==", user.email))
-          );
-          if (!byEmail.empty) {
-            tenantDoc = { id: byEmail.docs[0].id, ...byEmail.docs[0].data() } as Tenant;
-          }
+        if (!byEmail.empty) {
+          tenantDoc = { id: byEmail.docs[0].id, ...byEmail.docs[0].data() } as Tenant;
         }
-
-        if (!tenantDoc) return;
-        setTenant(tenantDoc);
-
-        // Fetch property
-        if (tenantDoc.propertyId) {
-          const pSnap = await getDoc(doc(db, "properties", tenantDoc.propertyId));
-          if (pSnap.exists()) setProperty({ id: tenantDoc.propertyId, ...pSnap.data() } as Property);
-        }
-
-        // Fetch unit
-        if (tenantDoc.unitId) {
-          const uSnap = await getDoc(doc(db, "units", tenantDoc.unitId));
-          if (uSnap.exists()) setUnit({ id: tenantDoc.unitId, ...uSnap.data() } as Unit);
-        }
-
-        // Open maintenance requests
-        const maintSnap = await getDocs(
-          query(
-            collection(db, "maintenance_requests"),
-            where("tenantId", "==", user.uid),
-            where("status",   "!=", "resolved")
-          )
-        );
-        setOpenRequests(maintSnap.size);
-
-      } catch (err) {
-        console.error("Error fetching tenant data:", err);
-      } finally {
-        setLoading(false);
       }
-    };
-    fetchTenantData();
-  }, [user]);
 
+      if (!tenantDoc) {
+        setLoading(false);
+        return;
+      }
+      setTenant(tenantDoc);
+
+      // Property
+      if (tenantDoc.propertyId) {
+        const pSnap = await getDoc(doc(db, "properties", tenantDoc.propertyId));
+        if (pSnap.exists()) setProperty({ id: tenantDoc.propertyId, ...pSnap.data() } as Property);
+      }
+
+      // Unit
+      if (tenantDoc.unitId) {
+        const uSnap = await getDoc(doc(db, "units", tenantDoc.unitId));
+        if (uSnap.exists()) setUnit({ id: tenantDoc.unitId, ...uSnap.data() } as Unit);
+      }
+
+      // Open maintenance requests (keyed by uid, not tenantId doc)
+      const maintSnap = await getDocs(
+        query(
+          collection(db, "maintenance_requests"),
+          where("tenantId", "==", user.uid),
+          where("status",   "!=", "resolved")
+        )
+      );
+      setOpenRequests(maintSnap.size);
+    } catch (err) {
+      console.error("Error fetching tenant data:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ── Wellness update ──────────────────────────────────────────────────────
   const handleWellnessUpdate = async (status: WellnessStatus) => {
     if (!tenant || updatingWellness) return;
     setUpdatingWellness(true);
@@ -120,6 +146,7 @@ export default function TenantDashboard() {
     }
   };
 
+  // ── Loading spinner ──────────────────────────────────────────────────────
   if (loading) {
     return (
       <div className="flex items-center justify-center h-screen">
@@ -128,15 +155,18 @@ export default function TenantDashboard() {
     );
   }
 
-  // Rent due date
-  const today      = new Date();
-  const dueDay     = unit?.rentDueDay ?? 1;
-  const rentDueDate = new Date(today.getFullYear(), today.getMonth(), dueDay);
+  // ── Derived values ───────────────────────────────────────────────────────
+  const displayName = currentUser?.displayName || currentUser?.email?.split("@")[0] || "Tenant";
+
+  const today         = new Date();
+  const dueDay        = unit?.rentDueDay ?? 1;
+  const rentDueDate   = new Date(today.getFullYear(), today.getMonth(), dueDay);
   if (rentDueDate < today) rentDueDate.setMonth(rentDueDate.getMonth() + 1);
   const rentDueFormatted = rentDueDate.toLocaleDateString("en-GB", {
     day: "numeric", month: "short",
   });
 
+  // ── Render ───────────────────────────────────────────────────────────────
   return (
     <main className="min-h-screen bg-gray-50 p-6">
       <div className="mx-auto max-w-7xl space-y-8">
