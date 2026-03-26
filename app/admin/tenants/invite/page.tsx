@@ -2,25 +2,34 @@
 
 import { useState } from "react";
 import {
-  addDoc, collection, query, where, getDocs, serverTimestamp
+  addDoc,
+  collection,
+  query,
+  where,
+  getDocs,
+  serverTimestamp,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { createTenantInvite } from "@/lib/invite";
 import { useOrgContext } from "@/lib/org-context";
 import {
-  ClipboardCopy, Loader2, CheckCircle, MessageCircle
+  ClipboardCopy,
+  Loader2,
+  CheckCircle,
+  MessageCircle,
+  Mail,
 } from "lucide-react";
 
 export default function AdminTenantInvitePage() {
   const { orgId } = useOrgContext();
 
-  const [email,      setEmail]      = useState("");
-  const [name,       setName]       = useState("");
+  const [email, setEmail] = useState("");
+  const [name, setName] = useState("");
   const [inviteLink, setInviteLink] = useState("");
-  const [loading,    setLoading]    = useState(false);
-  const [error,      setError]      = useState("");
-  const [copied,     setCopied]     = useState(false);
-  const [toast,      setToast]      = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [copied, setCopied] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
 
   /* ── TOAST ── */
   const showToast = (message: string) => {
@@ -54,25 +63,32 @@ export default function AdminTenantInvitePage() {
       const snap = await getDocs(q);
 
       if (!snap.empty) {
-        setError("A tenant with this email already exists in your organisation.");
+        setError(
+          "A tenant with this email already exists in your organisation."
+        );
         setLoading(false);
         return;
       }
 
       const tenantRef = await addDoc(collection(db, "tenants"), {
-        name:       name.trim(),
-        email:      email.trim(),
+        name: name.trim(),
+        email: email.trim(),
         propertyId: null,
-        unitId:     null,
-        status:     "pending",
+        unitId: null,
+        status: "pending",
         orgId,
-        createdAt:  serverTimestamp(),
+        createdAt: serverTimestamp(),
       });
 
-      const code = await createTenantInvite(tenantRef.id, email, orgId);
+      const code = await createTenantInvite(
+        tenantRef.id,
+        email,
+        orgId
+      );
 
       setInviteLink(`${window.location.origin}/signup/${code}`);
       setCopied(false);
+      showToast("Invite link created");
 
     } catch {
       setError("Failed to create invite.");
@@ -102,11 +118,39 @@ export default function AdminTenantInvitePage() {
 
     const message = encodeURIComponent(
       `Hi${name ? ` ${name}` : ""},\n\n` +
-      `You’ve been invited to join Housify.\n\n` +
-      `Create your account here:\n${inviteLink}`
+        `You’ve been invited to join Housify.\n\n` +
+        `Create your account here:\n${inviteLink}`
     );
 
     window.open(`https://wa.me/?text=${message}`, "_blank");
+  };
+
+  /* ── EMAIL ── */
+  const handleEmailShare = () => {
+    if (!inviteLink) return;
+
+    const subject = encodeURIComponent(
+      "You're invited to join Housify"
+    );
+
+    const body = encodeURIComponent(
+      `Hi${name ? ` ${name}` : ""},\n\n` +
+        `You’ve been invited to join Housify.\n\n` +
+        `Create your account here:\n${inviteLink}\n\n` +
+        `If you didn’t expect this, you can ignore this message.\n\n` +
+        `— Housify`
+    );
+
+    window.location.href = `mailto:${email}?subject=${subject}&body=${body}`;
+  };
+
+  /* ── RESET ── */
+  const handleReset = () => {
+    setName("");
+    setEmail("");
+    setInviteLink("");
+    setCopied(false);
+    setError("");
   };
 
   /* ── UI ── */
@@ -115,7 +159,7 @@ export default function AdminTenantInvitePage() {
       <h1 className="text-2xl font-bold">Invite Tenant</h1>
 
       <p className="text-sm text-gray-600">
-        Generate an invite link and share it with your tenant via WhatsApp or copy link.
+        Create a secure invite link and share it via WhatsApp, email, or copy it manually.
       </p>
 
       {error && (
@@ -149,18 +193,23 @@ export default function AdminTenantInvitePage() {
       </button>
 
       {inviteLink && (
-        <div className="bg-green-50 border border-green-200 p-4 rounded space-y-3">
+        <div className="bg-green-50 border border-green-200 p-4 rounded space-y-4">
           <p className="font-medium text-green-800 flex items-center gap-2">
             <CheckCircle className="h-4 w-4" />
             Invite Link Ready
           </p>
 
-          <p className="text-xs text-green-700">
-            This link expires in 7 days.
-          </p>
+          <div className="text-xs text-green-800 space-y-1">
+            <p><strong>Name:</strong> {name}</p>
+            <p><strong>Email:</strong> {email}</p>
+            <p><strong>Status:</strong> Pending</p>
+            <p><strong>Expires:</strong> 7 days</p>
+          </div>
 
           <div className="flex items-center justify-between gap-2">
-            <p className="text-sm break-all text-gray-700">{inviteLink}</p>
+            <p className="text-sm break-all text-gray-700">
+              {inviteLink}
+            </p>
 
             <button
               onClick={handleCopyLink}
@@ -182,20 +231,35 @@ export default function AdminTenantInvitePage() {
             </button>
           </div>
 
-          {/* ACTION BUTTONS */}
           <div className="flex gap-2 pt-2">
             <button
               onClick={handleWhatsAppShare}
-              className="flex-1 flex items-center justify-center gap-2 bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 text-sm font-medium"
+              disabled={!inviteLink}
+              className="flex-1 flex items-center justify-center gap-2 bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 text-sm font-medium disabled:opacity-50"
             >
               <MessageCircle className="h-4 w-4" />
-              Share via WhatsApp
+              WhatsApp
+            </button>
+
+            <button
+              onClick={handleEmailShare}
+              disabled={!inviteLink}
+              className="flex-1 flex items-center justify-center gap-2 bg-gray-800 text-white px-4 py-2 rounded hover:bg-black text-sm font-medium disabled:opacity-50"
+            >
+              <Mail className="h-4 w-4" />
+              Email
             </button>
           </div>
+
+          <button
+            onClick={handleReset}
+            className="w-full text-sm text-gray-600 hover:text-black pt-2"
+          >
+            + Create another invite
+          </button>
         </div>
       )}
 
-      {/* TOAST */}
       {toast && (
         <div className="fixed bottom-6 right-6 bg-black text-white text-sm px-4 py-2 rounded-lg shadow-lg">
           {toast}
