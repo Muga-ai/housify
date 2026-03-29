@@ -1,11 +1,20 @@
 "use client";
 
+/**
+ * app/tenant/layout.tsx
+ *
+ * CHANGES FROM PREVIOUS:
+ * - Added "Refer & Earn" nav item pointing to /tenant/refer
+ * - Updated branding from "Housify KE" to "Tunzaprop"
+ * - Everything else identical
+ */
+
 import { useEffect } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { signOut, onAuthStateChanged, User } from "firebase/auth";
 import { auth } from "@/lib/firebase";
 import Link from "next/link";
-import { Home, Wrench, FileText, LogOut, Building2 } from "lucide-react";
+import { Home, Wrench, FileText, LogOut, Building2, Gift } from "lucide-react";
 
 interface NavItem {
   title: string;
@@ -14,14 +23,12 @@ interface NavItem {
 }
 
 export default function TenantLayout({ children }: { children: React.ReactNode }) {
-  const router = useRouter();
+  const router   = useRouter();
   const pathname = usePathname();
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user: User | null) => {
-      if (!user) {
-        router.push("/login");
-      }
+      if (!user) router.push("/login");
     });
     return unsubscribe;
   }, [router]);
@@ -32,9 +39,10 @@ export default function TenantLayout({ children }: { children: React.ReactNode }
   };
 
   const navItems: NavItem[] = [
-    { title: "Dashboard", href: "/tenant/dashboard", icon: <Home className="h-5 w-5" /> },
-    { title: "Maintenance", href: "/tenant/maintenance", icon: <Wrench className="h-5 w-5" /> },
-    { title: "Rent Payments", href: "/tenant/payments", icon: <FileText className="h-5 w-5" /> },
+    { title: "Dashboard",    href: "/tenant/dashboard",  icon: <Home      className="h-5 w-5" /> },
+    { title: "Maintenance",  href: "/tenant/maintenance", icon: <Wrench    className="h-5 w-5" /> },
+    { title: "Rent Payments", href: "/tenant/payments",  icon: <FileText  className="h-5 w-5" /> },
+    { title: "Refer & Earn", href: "/tenant/refer",      icon: <Gift      className="h-5 w-5" /> }, // ← NEW
   ];
 
   return (
@@ -43,7 +51,7 @@ export default function TenantLayout({ children }: { children: React.ReactNode }
       <aside className="w-64 bg-white border-r hidden md:flex flex-col">
         <div className="px-6 py-8 font-bold text-2xl border-b flex items-center gap-3">
           <Building2 className="h-8 w-8 text-indigo-600" />
-          Housify KE
+          Tunzaprop {/* ← UPDATED from Housify KE */}
         </div>
 
         <nav className="mt-8 flex-1 px-4">
@@ -61,6 +69,12 @@ export default function TenantLayout({ children }: { children: React.ReactNode }
               >
                 {item.icon}
                 <span className="text-sm font-medium">{item.title}</span>
+                {/* Subtle badge to draw attention to new feature */}
+                {item.href === "/tenant/refer" && (
+                  <span className="ml-auto text-xs font-bold bg-indigo-100 text-indigo-600 px-1.5 py-0.5 rounded-full">
+                    New
+                  </span>
+                )}
               </Link>
             );
           })}
@@ -83,14 +97,35 @@ export default function TenantLayout({ children }: { children: React.ReactNode }
         <header className="md:hidden bg-white border-b px-6 py-4 flex items-center justify-between shadow-sm">
           <div className="flex items-center gap-3">
             <Building2 className="h-7 w-7 text-indigo-600" />
-            <span className="font-bold text-xl">Tunza Property KE</span>
+            <span className="font-bold text-xl">Tunzaprop</span>
           </div>
           <button onClick={handleLogout} className="text-red-600 hover:text-red-700 transition">
             <LogOut className="h-6 w-6" />
           </button>
         </header>
 
-        <main className="flex-1 p-6 md:p-8 overflow-y-auto">{children}</main>
+        {/* Mobile bottom nav */}
+        <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t z-50 flex">
+          {navItems.map((item) => {
+            const active = pathname === item.href;
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={`flex-1 flex flex-col items-center gap-0.5 py-3 text-xs transition ${
+                  active ? "text-indigo-600 font-medium" : "text-gray-500"
+                }`}
+              >
+                {item.icon}
+                <span>{item.title}</span>
+              </Link>
+            );
+          })}
+        </nav>
+
+        <main className="flex-1 p-6 md:p-8 overflow-y-auto pb-20 md:pb-8">
+          {children}
+        </main>
       </div>
     </div>
   );

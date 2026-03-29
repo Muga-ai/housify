@@ -3,11 +3,15 @@
 /**
  * app/tenant/dashboard/page.tsx
  *
- * FIXES:
+ * FIXES (original):
  * 1. Replaced `auth.currentUser` (null on refresh) with `onAuthStateChanged`
  *    so the dashboard waits for Firebase to restore the session before fetching.
  * 2. `fetchTenantData` now receives the user object explicitly — no closure race.
  * 3. `setLoading(false)` is now always reached (was skipped when user was null).
+ *
+ * ADDITIONS:
+ * 4. Referral CTA — fetches vacant unit count (same orgId) and shows a
+ *    "Refer & Earn" banner after the Quick Actions section when vacancies exist.
  */
 
 import { useEffect, useState } from "react";
@@ -19,7 +23,7 @@ import {
 } from "firebase/firestore";
 import {
   Home, Wrench, FileText, CalendarDays, Loader2,
-  Heart, AlertTriangle, CheckCircle,
+  Heart, AlertTriangle, CheckCircle, Gift,
 } from "lucide-react";
 import Link from "next/link";
 
@@ -28,7 +32,7 @@ type WellnessStatus = "green" | "yellow" | "red";
 interface Tenant {
   id: string; name: string; email: string;
   propertyId?: string | null; unitId?: string | null;
-  uid?: string | null;
+  uid?: string | null; orgId?: string | null;
   status: "pending" | "active" | "disabled";
   wellnessStatus?: WellnessStatus;
 }
@@ -50,6 +54,9 @@ export default function TenantDashboard() {
   const [loading,          setLoading]          = useState(true);
   const [openRequests,     setOpenRequests]     = useState(0);
   const [updatingWellness, setUpdatingWellness] = useState(false);
+
+  // ── Referral state ──────────────────────────────────────────────────────
+  const [vacantCount, setVacantCount] = useState(0);
 
   // ── Step 1: wait for Firebase Auth to rehydrate ─────────────────────────
   useEffect(() => {
@@ -121,6 +128,18 @@ export default function TenantDashboard() {
         )
       );
       setOpenRequests(maintSnap.size);
+
+      // ── Fetch vacant units count for referral CTA ──────────────────────
+      if (tenantDoc.orgId) {
+        const vacantSnap = await getDocs(
+          query(
+            collection(db, "units"),
+            where("orgId",    "==", tenantDoc.orgId),
+            where("tenantId", "==", null)
+          )
+        );
+        setVacantCount(vacantSnap.size);
+      }
     } catch (err) {
       console.error("Error fetching tenant data:", err);
     } finally {
@@ -293,6 +312,31 @@ export default function TenantDashboard() {
             </div>
           </Link>
         </section>
+
+        {/* REFERRAL CTA — only shown when there are vacant units in the org */}
+        {vacantCount > 0 && (
+          <section>
+            <Link
+              href="/tenant/refer"
+              className="flex items-center gap-4 rounded-xl border-2 border-indigo-100 bg-gradient-to-r from-indigo-50 to-white p-5 shadow-sm hover:shadow-md transition group"
+            >
+              <div className="rounded-xl bg-indigo-600 p-3 shrink-0">
+                <Gift className="h-6 w-6 text-white" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="font-semibold text-gray-900 group-hover:text-indigo-700 transition">
+                  {vacantCount} vacant unit{vacantCount !== 1 ? "s" : ""} in your building
+                </p>
+                <p className="text-sm text-gray-500 mt-0.5">
+                  Know someone looking for a place? Refer them and earn a commission when they move in.
+                </p>
+              </div>
+              <span className="shrink-0 text-sm font-semibold text-indigo-600 group-hover:underline whitespace-nowrap">
+                Refer &amp; Earn →
+              </span>
+            </Link>
+          </section>
+        )}
 
       </div>
     </main>

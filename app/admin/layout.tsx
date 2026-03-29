@@ -10,6 +10,7 @@
 import { useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { signOut } from "firebase/auth";
+import { Gift } from "lucide-react";
 import { auth } from "@/lib/firebase";
 import { useOrg, Org } from "@/lib/org";
 import { OrgContext } from "@/lib/org-context";
@@ -27,8 +28,10 @@ const NAV_ITEMS = [
   { title: "Tenants",     href: "/admin/tenants",     icon: <Users       className="h-5 w-5" /> },
   { title: "Maintenance", href: "/admin/maintenance", icon: <Wrench      className="h-5 w-5" /> },
   { title: "Payments",    href: "/admin/payments",    icon: <Receipt     className="h-5 w-5" /> },
-  { title: "Expenses",    href: "/admin/expenses",    icon: <TrendingDown className="h-5 w-5" /> },  // ← NEW
-  { title: "Reports",     href: "/admin/reports",     icon: <BarChart3   className="h-5 w-5" /> },  // ← NEW
+  { title: "Expenses",    href: "/admin/expenses",    icon: <TrendingDown className="h-5 w-5" /> },  
+  { title: "Reports",     href: "/admin/reports",     icon: <BarChart3   className="h-5 w-5" /> },  
+  { title: "Referrals", href: "/admin/referrals", icon: <Gift className="h-5 w-5" /> },
+
 ];
 
 const PLAN_BADGE: Record<string, string> = {
