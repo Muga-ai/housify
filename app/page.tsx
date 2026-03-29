@@ -31,7 +31,7 @@ export default function Home() {
   const { ref: howRef,          inView: howInView          } = useInView<HTMLDivElement>();
   const { ref: testimonialsRef, inView: testimonialsInView } = useInView<HTMLDivElement>();
 
-  // ─── All styles are now in globals.css — NO <style> tag needed here ───
+  // ─── All styles are now in globals.css 
 
   return (
    <div className="hfy-dark-page" style={{ minHeight: "100vh", width: "100%" }}>
@@ -45,7 +45,7 @@ export default function Home() {
               <Building2 size={18} color="#000" />
             </div>
             <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 800, fontSize: 20, letterSpacing: "0.02em", textTransform: "uppercase", color: "#fff" }}>
-              Housify KE
+              Tunza Property KE
             </span>
           </div>
 
@@ -81,7 +81,7 @@ export default function Home() {
       {menuOpen && (
         <div className="mobile-nav open">
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-            <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 800, fontSize: 20, textTransform: "uppercase" }}>Housify KE</span>
+            <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 800, fontSize: 20, textTransform: "uppercase" }}>Tunza Property KE</span>
             <button onClick={() => setMenuOpen(false)} style={{ background: "none", border: "none", color: "var(--text2)", cursor: "pointer", fontSize: 24 }}>✕</button>
           </div>
           {["Features", "How It Works", "Pricing"].map((item) => (
@@ -121,7 +121,7 @@ export default function Home() {
                 </h1>
 
                 <p style={{ fontSize: 17, color: "var(--text2)", lineHeight: 1.7, maxWidth: 460, marginBottom: 36, fontWeight: 300 }}>
-                  Housify KE gives Nairobi landlords and property agents a single command centre for rent collection, tenant management, maintenance tracking, and financial reporting.
+                  Tunza Property KE gives Nairobi landlords and property agents a single command centre for rent collection, tenant management, maintenance tracking, and financial reporting.
                 </p>
 
                 <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
@@ -364,7 +364,7 @@ export default function Home() {
             <div style={{ marginBottom: 56 }}>
               <div className={`pill fade-up ${testimonialsInView ? "visible" : ""}`} style={{ marginBottom: 16 }}>From Our Users</div>
               <h2 className={`display fade-up d1 ${testimonialsInView ? "visible" : ""}`} style={{ fontSize: "clamp(24px, 3vw, 36px)", color: "#fff" }}>
-                Landlords Love Housify
+                Landlords Love Tunza Property KE
               </h2>
             </div>
 
@@ -406,7 +406,7 @@ export default function Home() {
               <span style={{ color: "var(--amber)" }}>Under Control.</span>
             </h2>
             <p style={{ fontSize: 16, color: "var(--text2)", marginBottom: 36, lineHeight: 1.7, fontWeight: 300 }}>
-              Join property managers across Nairobi who have replaced spreadsheets and WhatsApp with Housify KE.
+              Join property managers across Nairobi who have replaced spreadsheets and WhatsApp with Tunza Property KE.
             </p>
             <div style={{ display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap" }}>
               <Link href="/register" className="btn-primary" style={{ fontSize: 16, padding: "16px 36px" }}>
@@ -434,7 +434,7 @@ export default function Home() {
                 <div style={{ width: 32, height: 32, background: "var(--amber)", borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center" }}>
                   <Building2 size={18} color="#000" />
                 </div>
-                <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 800, fontSize: 18, textTransform: "uppercase", color: "#fff" }}>Housify KE</span>
+                <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 800, fontSize: 18, textTransform: "uppercase", color: "#fff" }}>Tunza Property KE</span>
               </div>
               <p style={{ fontSize: 13, color: "var(--text2)", lineHeight: 1.7, maxWidth: 300, fontWeight: 300, marginBottom: 20 }}>
                 Smart property management software built for Kenyan landlords, property managers, and housing agents.
@@ -445,11 +445,11 @@ export default function Home() {
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "var(--text2)" }}>
                   <Mail size={14} style={{ color: "var(--amber)", flexShrink: 0 }} />
-                  <a href="mailto:hello@housify.co.ke" className="footer-link">hello@housify.co.ke</a>
+                  <a href="mailto:hello@tunzaprop.co.ke" className="footer-link">hello@tunzaprop.co.ke</a>
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "var(--text2)" }}>
                   <Globe size={14} style={{ color: "var(--amber)", flexShrink: 0 }} />
-                  <a href="https://housify-chi.vercel.app" className="footer-link" target="_blank" rel="noopener noreferrer">housify-chi.vercel.app</a>
+                  <a href="https://tunzaprop.co.ke" className="footer-link" target="_blank" rel="noopener noreferrer">tunzaprop.co.ke</a>
                 </div>
               </div>
             </div>
@@ -500,7 +500,7 @@ export default function Home() {
           <hr className="divider" />
 
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", paddingTop: 24, flexWrap: "wrap", gap: 12 }}>
-            <p style={{ fontSize: 12, color: "var(--text2)" }}>© {new Date().getFullYear()} Housify KE. All rights reserved.</p>
+            <p style={{ fontSize: 12, color: "var(--text2)" }}>© {new Date().getFullYear()} Tunza Property KE. All rights reserved.</p>
             <div style={{ display: "flex", gap: 20 }}>
               <a href="#" className="footer-link" style={{ fontSize: 12 }}>Privacy</a>
               <a href="#" className="footer-link" style={{ fontSize: 12 }}>Terms</a>
