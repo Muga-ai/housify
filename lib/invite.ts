@@ -35,7 +35,7 @@ export interface InviteData {
 export async function createTenantInvite(
   tenantId: string,
   email: string,
-  orgId: string           // ← NEW param
+  orgId: string           
 ): Promise<string> {
   const code = nanoid(32);
 

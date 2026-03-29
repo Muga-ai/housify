@@ -149,7 +149,7 @@ export default function CompanySignupPage() {
       <nav className="border-b border-white/10 px-6 py-4 flex items-center justify-between max-w-7xl mx-auto">
         <Link href="/" className="flex items-center gap-2 font-bold text-lg">
           <Building2 className="h-5 w-5 text-indigo-400" />
-          Housify KE
+          Tunza Property KE
         </Link>
         <Link href="/login" className="text-sm text-white/60 hover:text-white transition">
           Already have an account? Sign in

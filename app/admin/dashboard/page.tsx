@@ -223,7 +223,7 @@ export default function AdminDashboard() {
 
   /* ── FindAHome listing URL with utm tracking ── */
   const findAHomeUrl =
-    `https://www.findahome.co.ke/?utm_source=housify&utm_medium=dashboard&utm_campaign=vacant_units`;
+    `https://www.findahome.co.ke/?utm_source=tunzaprop&utm_medium=dashboard&utm_campaign=vacant_units`;
 
   return (
     <main className="min-h-screen bg-gray-50">

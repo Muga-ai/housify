@@ -83,7 +83,7 @@ export default function TenantLayout({ children }: { children: React.ReactNode }
         <header className="md:hidden bg-white border-b px-6 py-4 flex items-center justify-between shadow-sm">
           <div className="flex items-center gap-3">
             <Building2 className="h-7 w-7 text-indigo-600" />
-            <span className="font-bold text-xl">Housify KE</span>
+            <span className="font-bold text-xl">Tunza Property KE</span>
           </div>
           <button onClick={handleLogout} className="text-red-600 hover:text-red-700 transition">
             <LogOut className="h-6 w-6" />

@@ -88,7 +88,7 @@ export default function LoginPage() {
         <div className="flex flex-col items-center mb-6">
           <div className="flex items-center gap-2 text-xl font-bold">
             <Building2 className="h-6 w-6 text-indigo-600" />
-            Housify KE
+            Tunza Property KE
           </div>
           <p className="mt-2 text-sm text-gray-600">Sign in to your dashboard</p>
         </div>

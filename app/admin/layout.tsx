@@ -88,7 +88,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           <AlertTriangle className="h-12 w-12 text-red-500 mx-auto" />
           <h2 className="text-xl font-bold">Subscription inactive</h2>
           <p className="text-gray-600">
-            Your Housify KE subscription has expired. Please renew to continue.
+            Your Tunza Property KE subscription has expired. Please renew to continue.
           </p>
           <button onClick={handleLogout} className="text-sm text-gray-500 underline">
             Sign out
@@ -121,7 +121,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2 font-bold text-lg">
                 <Building2 className="h-5 w-5 text-indigo-600" />
-                Housify KE
+                Tunza Property KE
               </div>
               <button className="md:hidden" onClick={() => setIsOpen(false)}>
                 <X className="h-5 w-5" />
@@ -176,7 +176,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             <button onClick={() => setIsOpen(true)}>
               <Menu />
             </button>
-            <span className="font-bold">Housify KE</span>
+            <span className="font-bold">Tunza Property KE</span>
             <button onClick={handleLogout} className="text-red-600 text-sm">
               Logout
             </button>
