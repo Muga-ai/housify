@@ -5,7 +5,6 @@ import { collection, query, where, getDocs, addDoc, serverTimestamp } from "fire
 import { db } from "@/lib/firebase";
 import { Home, Gift, Loader2, CheckCircle, AlertTriangle, Clock } from "lucide-react";
 
-export const dynamic = "force-dynamic";
 
 type Stage = "loading" | "form" | "submitting" | "done" | "invalid";
 
