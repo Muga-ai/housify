@@ -4,13 +4,28 @@
  * app/tenant/refer/page.tsx
  *
  * Tenant referral & earnings page.
+ *
+ * What it does:
+ * - Fetches the current tenant's doc to get their unique referral code (tenant doc ID)
+ * - Fetches vacant units in the same org so tenant can see what's available
+ * - Fetches all referrals made by this tenant and their statuses
+ * - Lets tenant copy their referral link or share it
+ * - Shows earnings: pending (unit filled, not yet paid) and paid out
+ *
+ * Referral link format: https://tunzaprop.co.ke/join?ref=<tenantDocId>
+ *
+ * Referral lifecycle (managed by admin):
+ *   submitted → unit_filled → paid
+ *
+ * No new referral doc is created here — it is created on the /join page
+ * when the referred person completes registration.
  */
 
 import { useEffect, useState } from "react";
 import { onAuthStateChanged } from "firebase/auth";
 import { auth, db } from "@/lib/firebase";
 import {
-  collection, query, where, getDocs, doc, getDoc, orderBy,
+  collection, query, where, getDocs, doc, getDoc,
 } from "firebase/firestore";
 import {
   Gift, Copy, CheckCircle, Loader2, Home,
@@ -88,71 +103,40 @@ export default function TenantReferPage() {
 
   /* ── Auth + data fetch ─────────────────────────────────────────────── */
   useEffect(() => {
-    let isMounted = true;
-
     const unsub = onAuthStateChanged(auth, async (user) => {
-      if (!user) {
-        if (isMounted) setLoading(false);
-        return;
-      }
+      if (!user) { setLoading(false); return; }
 
       try {
         /* 1. Find tenant doc */
         const byUid = await getDocs(
           query(collection(db, "tenants"), where("uid", "==", user.uid))
         );
+        if (byUid.empty) { setLoading(false); return; }
 
-        if (byUid.empty) {
-          if (isMounted) setLoading(false);
-          return;
-        }
-
-        const tenantDoc = {
-          id: byUid.docs[0].id,
-          ...byUid.docs[0].data(),
-        } as Tenant;
-
-        if (isMounted) setTenant(tenantDoc);
+        const tenantDoc = { id: byUid.docs[0].id, ...byUid.docs[0].data() } as Tenant;
+        setTenant(tenantDoc);
 
         const orgId = tenantDoc.orgId;
 
         /* 2. Vacant units in same org */
-        let unitSnap;
+        const unitSnap = await getDocs(
+          query(
+            collection(db, "units"),
+            where("orgId", "==", orgId),
+            where("tenantId", "==", null)
+          )
+        );
 
-        try {
-          // Preferred (if your schema supports it)
-          unitSnap = await getDocs(
-            query(
-              collection(db, "units"),
-              where("orgId", "==", orgId),
-              where("tenantId", "==", null)
-            )
-          );
-        } catch {
-          // Fallback safety (prevents silent failure)
-          unitSnap = await getDocs(
-            query(
-              collection(db, "units"),
-              where("orgId", "==", orgId)
-            )
-          );
-        }
-
-        /* 3. Fetch property names */
+        /* 3. Fetch property names for vacant units */
         const propIds = [...new Set(
           unitSnap.docs.map((d) => d.data().propertyId).filter(Boolean)
         )];
-
         const propMap: Record<string, Property> = {};
-
         await Promise.all(
           propIds.map(async (pid) => {
             const pSnap = await getDoc(doc(db, "properties", pid));
             if (pSnap.exists()) {
-              propMap[pid] = {
-                id: pid,
-                ...pSnap.data(),
-              } as Property;
+              propMap[pid] = { id: pid, ...pSnap.data() } as Property;
             }
           })
         );
@@ -168,48 +152,33 @@ export default function TenantReferPage() {
               rentAmount: data.rentAmount,
               bedrooms: data.bedrooms,
               floor: data.floor,
-              tenantId: data.tenantId ?? null,
             };
           })
-          // Strong filter (ensures only real vacant units)
-          .filter((u: any) => !u.tenantId)
+          // Exclude the tenant's own unit if somehow it shows
           .filter((u) => u.id !== tenantDoc.unitId);
 
-        if (isMounted) setVacantUnits(vacant);
+        setVacantUnits(vacant);
 
-        /* 4. Referrals */
+        /* 4. Referrals made by this tenant */
         const refSnap = await getDocs(
           query(
             collection(db, "referrals"),
-            where("referrerTenantId", "==", tenantDoc.id),
-            orderBy("createdAt", "desc")
+            where("referrerTenantId", "==", tenantDoc.id)
           )
         );
-
-        if (isMounted) {
-          setReferrals(
-            refSnap.docs.map((d) => ({
-              id: d.id,
-              ...d.data(),
-            } as Referral))
-          );
-        }
-
+        setReferrals(
+          refSnap.docs.map((d) => ({ id: d.id, ...d.data() } as Referral))
+        );
       } catch (err) {
         console.error("Referral page error:", err);
       } finally {
-        if (isMounted) setLoading(false);
+        setLoading(false);
       }
     });
-
-    return () => {
-      isMounted = false;
-      unsub();
-    };
+    return unsub;
   }, []);
 
   /* ── Derived values ────────────────────────────────────────────────── */
-
   const referralLink = tenant
     ? `https://tunzaprop.co.ke/join?ref=${tenant.id}`
     : "";
@@ -225,30 +194,30 @@ export default function TenantReferPage() {
   const paidCount = referrals.filter((r) => r.status === "paid").length;
 
   /* ── Copy handler ──────────────────────────────────────────────────── */
-
   const handleCopy = async () => {
     try {
       await navigator.clipboard.writeText(referralLink);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2500);
     } catch {
+      /* fallback for older browsers */
       const el = document.createElement("textarea");
       el.value = referralLink;
       document.body.appendChild(el);
       el.select();
       document.execCommand("copy");
       document.body.removeChild(el);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2500);
     }
-
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2500);
   };
 
   const handleShare = async () => {
     const shareData = {
       title: "Join me on Tunzaprop",
-      text: "Looking for a place? Use my link to see available units and get priority access 🏠",
+      text: `Hey! There's a great place available in my building. Check it out and sign up using my link — it helps both of us 🏠`,
       url: referralLink,
     };
-
     if (navigator.share) {
       await navigator.share(shareData);
     } else {
@@ -257,7 +226,6 @@ export default function TenantReferPage() {
   };
 
   /* ── Loading ───────────────────────────────────────────────────────── */
-
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -274,8 +242,7 @@ export default function TenantReferPage() {
     );
   }
 
-  /* ── Render (UNCHANGED UI STRUCTURE) ───────────────────────────────── */
-
+  /* ── Render ────────────────────────────────────────────────────────── */
   return (
     <main className="max-w-4xl mx-auto space-y-8">
 
@@ -290,8 +257,6 @@ export default function TenantReferPage() {
           When they move in, your landlord rewards you with a commission.
         </p>
       </header>
-
-      {/* (Everything below remains EXACTLY as you wrote it — unchanged UI) */}
 
       {/* Earnings summary */}
       <section className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -322,19 +287,145 @@ export default function TenantReferPage() {
           <Users className="h-5 w-5 text-indigo-600" />
           <h2 className="text-base font-semibold text-gray-900">Your referral link</h2>
         </div>
+        <p className="text-sm text-gray-500 mb-4">
+          Share this link with anyone looking for a place. When they register and move into
+          a vacant unit in your building, your landlord will reward you.
+        </p>
 
         <div className="flex items-center gap-2 bg-white border rounded-lg px-4 py-3">
           <span className="flex-1 text-sm text-gray-700 font-mono truncate">
             {referralLink}
           </span>
-          <button onClick={handleCopy} className="text-indigo-600">
-            {copied ? "Copied!" : "Copy"}
+          <button
+            onClick={handleCopy}
+            className="shrink-0 flex items-center gap-1.5 text-sm font-medium text-indigo-600 hover:text-indigo-800 transition"
+          >
+            {copied
+              ? <><CheckCircle className="h-4 w-4 text-green-500" /> Copied!</>
+              : <><Copy className="h-4 w-4" /> Copy</>
+            }
           </button>
         </div>
 
-        <button onClick={handleShare} className="mt-3 bg-indigo-600 text-white px-4 py-2 rounded-lg">
-          Share
+        <button
+          onClick={handleShare}
+          className="mt-3 flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold px-5 py-2.5 rounded-lg transition shadow-sm"
+        >
+          <Share2 className="h-4 w-4" />
+          Share via WhatsApp / SMS
         </button>
+
+        <p className="mt-3 text-xs text-gray-400">
+          Commission amount is set by your landlord per unit. Ask them for details.
+        </p>
+      </section>
+
+      {/* Vacant units in the building */}
+      <section>
+        <div className="flex items-center gap-2 mb-4">
+          <Home className="h-5 w-5 text-indigo-600" />
+          <h2 className="text-base font-semibold text-gray-900">
+            Available units in your building
+          </h2>
+          <span className="ml-auto text-xs text-gray-400">
+            {vacantUnits.length} vacant
+          </span>
+        </div>
+
+        {vacantUnits.length === 0 ? (
+          <div className="rounded-xl border border-dashed bg-gray-50 py-10 text-center">
+            <CheckCircle className="h-8 w-8 text-green-400 mx-auto mb-2" />
+            <p className="text-sm text-gray-500">No vacant units right now — fully occupied!</p>
+            <p className="text-xs text-gray-400 mt-1">Check back later or ask your landlord.</p>
+          </div>
+        ) : (
+          <div className="grid gap-4 sm:grid-cols-2">
+            {vacantUnits.map((unit) => (
+              <div key={unit.id} className="rounded-xl border bg-white p-5 shadow-sm hover:shadow-md transition">
+                <div className="flex items-start justify-between">
+                  <div>
+                    <p className="font-semibold text-gray-900">
+                      Unit {unit.unitNumber}
+                    </p>
+                    <p className="text-sm text-gray-500 mt-0.5">{unit.propertyName}</p>
+                  </div>
+                  <span className="text-xs font-semibold bg-red-100 text-red-700 px-2 py-0.5 rounded-full">
+                    Vacant
+                  </span>
+                </div>
+
+                <div className="mt-3 flex flex-wrap gap-3 text-sm text-gray-600">
+                  {unit.rentAmount && (
+                    <span className="font-medium text-indigo-700">
+                      KES {unit.rentAmount.toLocaleString()}/mo
+                    </span>
+                  )}
+                  {unit.bedrooms && (
+                    <span>{unit.bedrooms} bed{unit.bedrooms !== 1 ? "s" : ""}</span>
+                  )}
+                  {unit.floor && <span>Floor {unit.floor}</span>}
+                </div>
+
+                <button
+                  onClick={() => {
+                    const msg = encodeURIComponent(
+                      `Hi! There's a vacant unit available — Unit ${unit.unitNumber} at ${unit.propertyName}, KES ${unit.rentAmount?.toLocaleString() ?? "?"}/month. Sign up here and mention my referral: ${referralLink}`
+                    );
+                    window.open(`https://wa.me/?text=${msg}`, "_blank");
+                  }}
+                  className="mt-4 w-full flex items-center justify-center gap-2 border border-indigo-200 text-indigo-600 hover:bg-indigo-50 text-sm font-medium py-2 rounded-lg transition"
+                >
+                  <Share2 className="h-4 w-4" />
+                  Share this unit on WhatsApp
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
+      {/* Referral history */}
+      <section>
+        <div className="flex items-center gap-2 mb-4">
+          <TrendingUp className="h-5 w-5 text-indigo-600" />
+          <h2 className="text-base font-semibold text-gray-900">My referral history</h2>
+        </div>
+
+        {referrals.length === 0 ? (
+          <div className="rounded-xl border border-dashed bg-gray-50 py-10 text-center">
+            <Gift className="h-8 w-8 text-indigo-300 mx-auto mb-2" />
+            <p className="text-sm text-gray-500">No referrals yet — share your link to get started!</p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {referrals.map((ref) => {
+              const cfg = STATUS_CONFIG[ref.status] ?? STATUS_CONFIG.submitted;
+              return (
+                <div key={ref.id} className="rounded-xl border bg-white px-5 py-4 shadow-sm flex items-center justify-between gap-4">
+                  <div>
+                    <p className="font-medium text-gray-800 text-sm">{ref.referredName}</p>
+                    <p className="text-xs text-gray-400">{ref.referredEmail}</p>
+                    {ref.unitNumber && (
+                      <p className="text-xs text-gray-500 mt-0.5">Unit {ref.unitNumber}</p>
+                    )}
+                    <p className="text-xs text-gray-400 mt-1">{cfg.desc}</p>
+                  </div>
+                  <div className="flex flex-col items-end gap-1.5 shrink-0">
+                    <span className={`inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full ${cfg.badge}`}>
+                      {cfg.icon}
+                      {cfg.label}
+                    </span>
+                    {ref.commissionAmount != null && (
+                      <span className={`text-sm font-bold ${ref.status === "paid" ? "text-green-600" : "text-blue-600"}`}>
+                        KES {ref.commissionAmount.toLocaleString()}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </section>
 
     </main>

@@ -226,7 +226,7 @@ export default function AdminDashboard() {
     `https://www.findahome.co.ke/?utm_source=tunzaprop&utm_medium=dashboard&utm_campaign=vacant_units`;
 
   return (
-    <main className="min-h-screen bg-gray-50">
+    <main className="bg-gray-50">
       <div className="mx-auto max-w-7xl px-6 py-8 space-y-8">
 
         {/* HEADER */}
